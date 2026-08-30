@@ -3,70 +3,115 @@
 English | [简体中文](README_CN.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![DeepSeek Harness](https://img.shields.io/badge/DSH-Plugin-blueviolet.svg)](https://github.com/deepseek-ai/deepseek-harness)
+[![Zero Dependencies](https://img.shields.io/badge/Dependencies-0-brightgreen.svg)]()
+[![Platform: Web](https://img.shields.io/badge/Platform-Web-orange.svg)]()
 
-A [DeepSeek Harness](https://github.com/deepseek-harness) plugin that adds a **Usage Statistics** section to the Web settings sidebar: token totals, a 365-day activity heatmap, a 30-day input/output trend, and per-model share — all aggregated from your local session logs.
+A high-performance [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin that adds a native **Usage Statistics** dashboard to the Web settings: total / input / output / cache tokens, a 365-day activity heatmap, a 30-day daily token trend curve, and a provider/model share breakdown — aggregated directly from your local session logs.
 
 ![preview](preview.png)
 
-## Features
+---
 
-- **Key metrics at a glance** — total / input / output / cache-hit tokens, sessions, turns, peak-day tokens, longest turn, current & longest activity streaks.
-- **365-day activity heatmap** (contribution-graph style) of daily token usage.
-- **30-day daily token trend** — smoothed input vs. output lines with soft area fills.
-- **Per-model usage** — donut chart with a provider / model dimension toggle.
-- **Bilingual UI** — English and 简体中文, following the Web GUI language.
-- **Zero dependencies** — every chart is hand-rolled inline SVG; no chart library, no cross-package imports.
-- **Local only** — statistics are computed from local session logs and served by your local Web server. No telemetry, no network calls.
+## ✨ Features
 
-## How it works
+- **📊 Comprehensive Metrics Overview**
+  - **Macro Metrics**: Total Tokens, Peak Daily Tokens, Longest Turn Duration, Current & Longest Activity Streaks.
+  - **Granular Details**: Input Tokens, Output Tokens, Cache-Read Tokens, Total Sessions, Total Conversation Turns.
+- **🟩 365-Day Activity Heatmap**
+  - GitHub-style contribution heatmap visualizing daily token intensity and usage frequency throughout the year.
+- **📈 30-Day Daily Token Trend**
+  - Smooth Bézier dual-curve chart with soft area gradients comparing Input vs. Output token dynamics over time.
+- **🍩 Interactive Model & Provider Breakdown**
+  - Multi-colored SVG Donut chart with a one-click dimension switcher (`By Provider` / `By Model`), showing token volumes and percentage distributions.
+- **⚡ Zero External Dependencies**
+  - All charts, heatmaps, curves, and tooltips are hand-crafted inline SVGs. No heavy charting libraries (ECharts / Chart.js / D3) and no cross-package runtime baggage.
+- **🔒 100% Local & Privacy-First**
+  - All data is parsed from your local SQLite / JSONL session files and served by the internal Web server. Zero telemetry, zero external network requests.
+- **🌐 Seamless Bilingual Localization**
+  - Full native support for English and 简体中文, automatically synced with DSH's active UI locale.
 
-The plugin has two halves:
+---
 
-- **Server half (`index.js`)** aggregates every persisted session log into totals, per-day buckets, and per-model buckets, served at `GET /api/usage-stats/summary`. The aggregate is seeded lazily by the first request (a bounded-concurrency background scan), then every live `session/event` folds in incrementally — startup is never slowed, the endpoint answers instantly, and no full re-scan ever runs again.
-- **Client half (`client.js`)** registers a `settings.section` entry and renders the page — summary cards, the heatmap, the trend line, and the donut — as pure inline SVG.
+## 🏗️ Architecture & How It Works
 
-## Requirements
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    DSH Web Client (Browser)                 │
+│  - Settings Section: "Usage Statistics"                     │
+│  - Handcrafted Inline SVG (Heatmap / Trend / Donut)         │
+└──────────────────────────────▲──────────────────────────────┘
+                               │ GET /api/usage-stats/summary
+┌──────────────────────────────▼──────────────────────────────┐
+│                    DSH Server Plugin Layer                  │
+│  - Lazy Initial Scan (Bounded concurrency background worker)│
+│  - Real-time Event Incremental Tap (session/event stream)   │
+│  - In-Memory Cached State (Instant sub-millisecond response)│
+└──────────────────────────────▲──────────────────────────────┘
+                               │ Reads
+┌──────────────────────────────┴──────────────────────────────┐
+│               Local Session Storage (~/.dsh/)               │
+│               - session-persistence-jsonl / sqlite          │
+└─────────────────────────────────────────────────────────────┘
+```
 
-- The `dsh` CLI with the Web profile (DeepSeek Harness).
-- [pnpm](https://pnpm.io) — `dsh plugin` forwards to pnpm to manage profile dependencies.
+1. **Lazy & Non-blocking Initialization**:
+   The initial historical log scan is triggered lazily upon the first request via a bounded-concurrency background task. DSH startup is never blocked or slowed down.
+2. **Real-time Incremental Folding**:
+   As new conversation turns occur, live `session/event` streams are incrementally folded into the in-memory aggregated totals. No full rescans ever run again.
+3. **Instant UI Response**:
+   The `/api/usage-stats/summary` endpoint responds instantly from the cached aggregator. If the initial background indexing is still computing, it provides an atomic status response for smooth polling.
 
-## Install
+---
 
-Install into the `web` profile straight from GitHub:
+## 📋 Requirements
+
+- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) with the `web` profile.
+- [pnpm](https://pnpm.io) (used by `dsh plugin` to link profile dependencies).
+
+---
+
+## 🚀 Installation
+
+### Option 1: Install directly from GitHub (Recommended)
 
 ```sh
+# Add plugin to the web profile
 dsh plugin --profile web add github:kolawong/dsh-plugin-usage-stats
+
+# Start DSH Web service
 dsh web
 ```
 
-Then open the Web GUI and go to **Settings → Usage statistics**.
-
-This plugin is plain JavaScript with no build step, so a git install works directly — no `pnpm allowBuilds` entry is needed. To install from a local checkout instead:
+### Option 2: Install from a local directory
 
 ```sh
+git clone https://github.com/kolawong/dsh-plugin-usage-stats.git
 dsh plugin --profile web add ./dsh-plugin-usage-stats
-```
-
-Verify the layer is active, then boot:
-
-```sh
-dsh --profile web --dump-config   # shows the "# == dsh-plugin-usage-stats" layer
 dsh web
 ```
 
-Uninstall:
+### Verification & Access
+
+After starting, open your browser and navigate to:
+👉 **Settings (`设置`) → Usage Statistics (`使用统计`)**
+
+To check that the plugin layer is properly registered:
+```sh
+dsh --profile web --dump-config | grep usage-stats
+```
+
+### Uninstall
 
 ```sh
 dsh plugin --profile web remove dsh-plugin-usage-stats
 ```
 
-## Configuration
+---
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `enabled` | boolean | `true` | Master switch for the section and the endpoint. |
+## ⚙️ Configuration
 
-You can override the plugin row in the profile's own patch layer (`$DSH_HOME/profiles/web/cordis.patch.yml`, default `~/.dsh/profiles/web/cordis.patch.yml`). A later layer replaces the whole row, so restate every key:
+The plugin is enabled by default. You can customize its options in your profile patch file (`$DSH_HOME/profiles/web/cordis.patch.yml`):
 
 ```yaml
 - insert:
@@ -76,49 +121,73 @@ You can override the plugin row in the profile's own patch layer (`$DSH_HOME/pro
         - webServer
         - sessionQuery
       config:
-        enabled: false
+        enabled: true
 ```
 
-## API
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | `boolean` | `true` | Master toggle for the statistics dashboard and HTTP API endpoint. |
 
-`GET /api/usage-stats/summary` returns the aggregate:
+---
+
+## 📡 HTTP API Reference
+
+### `GET /api/usage-stats/summary`
+
+Fetches aggregated session token usage and analytics.
+
+#### Example Response:
 
 ```jsonc
 {
   "totals": {
-    "inputTokens": 12000000, "outputTokens": 3400000, "totalTokens": 15900000,
-    "cacheReadTokens": 500000, "sessions": 42, "turns": 318, "steps": 1900, "llmMs": 5400000
+    "inputTokens": 22122000,
+    "outputTokens": 2583000,
+    "cacheReadTokens": 740000000,
+    "totalTokens": 764705000,
+    "sessions": 54,
+    "turns": 244,
+    "steps": 1900,
+    "llmMs": 5400000
   },
-  "byDay": { "2025-08-29": { "inputTokens": 1000, "outputTokens": 500, "totalTokens": 1500 } },
-  "byModel": { "ark/deepseek-v4-flash": { "inputTokens": 800, "outputTokens": 400, "totalTokens": 1200 } },
-  "longestTurnMs": 90000,
-  "streak": { "current": 3, "longest": 17 }
+  "byDay": {
+    "2026-08-20": { "inputTokens": 850000, "outputTokens": 120000, "totalTokens": 970000 },
+    "2026-08-28": { "inputTokens": 3435000, "outputTokens": 450000, "totalTokens": 3885000 }
+  },
+  "byModel": {
+    "openrouter/stealth/ox-alpha": {
+      "inputTokens": 200000000,
+      "outputTokens": 20000000,
+      "totalTokens": 220000000
+    }
+  },
+  "longestTurnMs": 75240000,
+  "streak": {
+    "current": 12,
+    "longest": 12
+  }
 }
 ```
 
-While the first aggregation is still running, the endpoint answers `{"computing":true}` and the page polls until the summary is ready.
+---
 
-## Development
+## 🛠️ Development & Testing
 
-No build step — plain ESM JavaScript. Layout:
-
-| File | Role |
-|---|---|
-| `index.js` | Server half: aggregation + HTTP endpoint. |
-| `client.js` | Client half: the settings-section UI (inline SVG charts). |
-| `index.d.ts` | Public type declarations for the server half. |
-| `cordis.patch.yml` | The bundle layer that inserts the plugin. |
-| `scripts/smoke.mjs` | Offline smoke test for the server half. |
-| `scripts/client-smoke.mjs` | Offline smoke test for the client half (stubbed React + module table). |
-
-Run the tests:
+This project is written in standard ES Modules with no compilation/build step required.
 
 ```sh
-npm test              # both halves
-npm run smoke         # server half only
-npm run smoke:client  # client half only
+# Run both server & client unit tests
+npm test
+
+# Run server aggregation smoke test
+npm run smoke
+
+# Run client SVG & module table mock test
+npm run smoke:client
 ```
 
-## License
+---
 
-[MIT](LICENSE) © kola
+## 📄 License
+
+[MIT](LICENSE) © [kola](https://github.com/kolawong)
