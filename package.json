@@ -1,0 +1,68 @@
+{
+  "name": "dsh-plugin-usage-stats",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness plugin adding a Usage Statistics section to the Web settings sidebar: token totals, daily activity heatmap, daily token trend, and per-model share, aggregated from all session logs.",
+  "type": "module",
+  "scripts": {
+    "smoke": "node scripts/smoke.mjs",
+    "smoke:client": "node scripts/client-smoke.mjs",
+    "test": "node scripts/smoke.mjs && node scripts/client-smoke.mjs"
+  },
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings-plugins",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-primitives"
+      ],
+      "platform": "web"
+    }
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "cordis",
+    "usage",
+    "statistics",
+    "tokens",
+    "settings"
+  ],
+  "author": "kola",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kolawong/dsh-plugin-usage-stats.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kolawong/dsh-plugin-usage-stats/issues"
+  },
+  "homepage": "https://github.com/kolawong/dsh-plugin-usage-stats#readme",
+  "license": "MIT",
+  "files": [
+    "index.js",
+    "client.js",
+    "index.d.ts",
+    "cordis.patch.yml",
+    "preview.png",
+    "README.md",
+    "README_CN.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.0",
+    "@deepseek-ai/schemastery": ">=3.0.0"
+  }
+}

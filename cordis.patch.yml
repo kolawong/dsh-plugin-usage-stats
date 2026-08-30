@@ -1,0 +1,12 @@
+# dsh-plugin-usage-stats — bundle patch
+#
+# Inserts the usage-stats plugin: aggregates token usage across all sessions
+# and serves /api/usage-stats/summary for the Web settings page.
+- insert:
+    - id: usage-stats
+      name: 'dsh-plugin-usage-stats'
+      inject:
+        - webServer
+        - sessionQuery
+      config:
+        enabled: true
