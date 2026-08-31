@@ -327,43 +327,43 @@ window.__ModuleLoader__.load({
             ],
           }),
           jsxs("div", {
-            style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "12px" },
+            style: { display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "8px" },
             children: [
               jsxs("div", {
-                style: { display: "flex", flexDirection: "column", gap: "2px" },
+                style: { display: "flex", flexDirection: "column", gap: "2px", minWidth: 0 },
                 children: [
-                  jsx("span", { style: { fontSize: "11.5px", color: "var(--dsw-alias-label-tertiary, #9ca3af)" }, children: t("costEstimated") }),
-                  jsx("span", { style: { fontSize: "18px", fontWeight: 600, color: "#38bdf8" }, children: formatMoney(cost, currency) }),
+                  jsx("span", { style: { fontSize: "11px", color: "var(--dsw-alias-label-tertiary, #9ca3af)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: t("costEstimated") }),
+                  jsx("span", { style: { fontSize: "17px", fontWeight: 600, color: "#38bdf8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: formatMoney(cost, currency) }),
                 ],
               }),
               jsxs("div", {
-                style: { display: "flex", flexDirection: "column", gap: "2px" },
+                style: { display: "flex", flexDirection: "column", gap: "2px", minWidth: 0 },
                 children: [
-                  jsx("span", { style: { fontSize: "11.5px", color: "var(--dsw-alias-label-tertiary, #9ca3af)" }, children: t("cacheSaved") }),
+                  jsx("span", { style: { fontSize: "11px", color: "var(--dsw-alias-label-tertiary, #9ca3af)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: t("cacheSaved") }),
                   jsxs("div", {
-                    style: { display: "flex", alignItems: "center", gap: "6px" },
+                    style: { display: "flex", alignItems: "baseline", gap: "4px", flexWrap: "nowrap", overflow: "hidden" },
                     children: [
-                      jsx("span", { style: { fontSize: "18px", fontWeight: 600, color: "#4ade80" }, children: formatMoney(saved, currency) }),
+                      jsx("span", { style: { fontSize: "17px", fontWeight: 600, color: "#4ade80", whiteSpace: "nowrap" }, children: formatMoney(saved, currency) }),
                       savedPercent > 0 ? jsx("span", {
-                        style: { fontSize: "10.5px", padding: "1px 6px", borderRadius: "8px", background: "rgba(74, 222, 128, 0.15)", color: "#4ade80" },
-                        children: `${t("savedPercent")} ${savedPercent}%`,
+                        style: { fontSize: "9.5px", padding: "1px 4px", borderRadius: "6px", background: "rgba(74, 222, 128, 0.15)", color: "#4ade80", whiteSpace: "nowrap", flexShrink: 0 },
+                        children: `${savedPercent}%`,
                       }) : null,
                     ],
                   }),
                 ],
               }),
               jsxs("div", {
-                style: { display: "flex", flexDirection: "column", gap: "2px" },
+                style: { display: "flex", flexDirection: "column", gap: "2px", minWidth: 0 },
                 children: [
-                  jsx("span", { style: { fontSize: "11.5px", color: "var(--dsw-alias-label-tertiary, #9ca3af)" }, children: t("speed") }),
-                  jsx("span", { style: { fontSize: "18px", fontWeight: 600, color: "var(--dsw-alias-label-primary, #f3f4f6)" }, children: `${totals?.tokensPerSecond || 0} t/s` }),
+                  jsx("span", { style: { fontSize: "11px", color: "var(--dsw-alias-label-tertiary, #9ca3af)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: t("speed") }),
+                  jsx("span", { style: { fontSize: "17px", fontWeight: 600, color: "var(--dsw-alias-label-primary, #f3f4f6)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: `${totals?.tokensPerSecond || 0} t/s` }),
                 ],
               }),
               jsxs("div", {
-                style: { display: "flex", flexDirection: "column", gap: "2px" },
+                style: { display: "flex", flexDirection: "column", gap: "2px", minWidth: 0 },
                 children: [
-                  jsx("span", { style: { fontSize: "11.5px", color: "var(--dsw-alias-label-tertiary, #9ca3af)" }, children: t("avgTurn") }),
-                  jsx("span", { style: { fontSize: "18px", fontWeight: 600, color: "var(--dsw-alias-label-primary, #f3f4f6)" }, children: formatMs(totals?.avgTurnMs) }),
+                  jsx("span", { style: { fontSize: "11px", color: "var(--dsw-alias-label-tertiary, #9ca3af)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: t("avgTurn") }),
+                  jsx("span", { style: { fontSize: "17px", fontWeight: 600, color: "var(--dsw-alias-label-primary, #f3f4f6)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: formatMs(totals?.avgTurnMs) }),
                 ],
               }),
             ],
