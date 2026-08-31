@@ -1,11 +1,20 @@
 /**
- * dsh-plugin-usage-stats — Client half (the Web settings "使用统计" section).
+ * dsh-plugin-usage-stats — Client half (Web Settings & In-Session Overlay).
  *
- * Registers a `settings.section` entry and renders a NextChat-style usage
- * page: summary cards, a daily token activity heatmap, a daily token trend
- * line (input vs output), and a per-model donut. Data comes from
- * /api/usage-stats/summary (the server half aggregates every session log).
- * All charts are hand-rolled SVG — no chart library, no cross-package import.
+ * Registers:
+ * 1. A `settings.section` entry ("使用统计" / "Usage Statistics") with:
+ *    - Cost & Savings Intelligence (USD/CNY currency switcher)
+ *    - 5-Way Token Composition Breakdown Bar
+ *    - 365-Day Activity Heatmap
+ *    - 30-Day Daily Token Trend Curve
+ *    - Model Distribution Donut & Ranking (By Provider / By Model / By Cost)
+ *    - Top 10 High-Volume Sessions Leaderboard (with 1-click navigation)
+ *    - Top 10 Tool Invocations Analytics
+ * 2. An in-session slash command overlay (`/stats` & `/usage`).
+ *
+ * Hand-rolled pure inline SVG — zero external charting dependencies.
+ *
+ * @license MIT
  */
 
 window.__ModuleLoader__.load({
@@ -13,7 +22,7 @@ window.__ModuleLoader__.load({
   factory: (require) => {
     const exports = {};
     const React = require("react");
-    const { useState, useEffect, useCallback } = React;
+    const { useState, useEffect, useCallback, useMemo } = React;
     const { jsx, jsxs } = require("react/jsx-runtime");
     const { IconRefreshOutline16 } = require("@deepseek-ai/dsh-client-ui-primitives");
 
@@ -21,13 +30,13 @@ window.__ModuleLoader__.load({
 
     const zh = {
       nav: "使用统计",
-      title: "使用统计",
-      intro: "聚合所有会话的 Token 用量与活动。",
+      title: "使用统计与成本看板",
+      intro: "聚合所有会话的 Token 用量、费用估算、上下文构成及工具活动。",
       loading: "统计加载中…",
       empty: "还没有会话用量数据",
       error: "统计加载失败",
       refresh: "刷新",
-      refreshHint: "重新统计",
+      refreshHint: "重新统计所有会话",
       totalTokens: "累计 Token",
       inputTokens: "输入 Token",
       outputTokens: "输出 Token",
@@ -38,59 +47,124 @@ window.__ModuleLoader__.load({
       longestTurn: "最长回合时长",
       streakCurrent: "当前连续天数",
       streakLongest: "最长连续天数",
-      activity: "Token 活动",
-      trend: "每日 Token 趋势",
-      byModel: "模型用量",
+      activity: "Token 活动热力图",
+      trend: "近 30 天每日 Token 趋势",
+      byModel: "模型与费用占比",
       dimProvider: "按供应商",
       dimModel: "按模型",
-      legendInput: "输入",
-      legendOutput: "输出",
+      dimCost: "按费用",
+      legendInput: "输入 Token",
+      legendOutput: "输出 Token",
       dayUnit: "天",
+
+      // Cost & Savings
+      costSection: "成本与效率概览",
+      costEstimated: "预估总费用",
+      cacheSaved: "缓存已节省",
+      savedPercent: "已节省",
+      speed: "平均生成速率",
+      avgTurn: "平均单回合耗时",
+      totalToolCalls: "工具调用总计",
+      currencyCny: "¥ 人民币",
+      currencyUsd: "$ 美元",
+
+      // Token Composition
+      composition: "Token 构成深度剖析",
+      compCacheRead: "缓存命中",
+      compUserInput: "用户输入",
+      compAssistantOutput: "模型回复",
+      compReasoning: "深度思考 (CoT)",
+      compToolResult: "工具返回结果",
+
+      // Top Sessions & Tools
+      topSessions: "高消耗会话排行榜 Top 10",
+      topTools: "高频工具调用 Top 10",
+      sessionTitle: "会话标题",
+      sessionWorkspace: "工作区",
+      sessionTokens: "总 Token",
+      sessionTurns: "回合",
+      sessionCost: "预估费用",
+      sessionActive: "最后活跃",
+      toolCalls: "次调用",
+      openSession: "打开会话",
+
+      // Modal & Slash Command
+      modalTitle: "会话用量速览",
+      close: "关闭",
     };
+
     const en = {
       nav: "Usage statistics",
-      title: "Usage statistics",
-      intro: "Token usage and activity aggregated across all sessions.",
+      title: "Usage & Cost Intelligence",
+      intro: "Token usage, cost estimations, composition, and tool analytics across all sessions.",
       loading: "Loading statistics…",
       empty: "No usage data yet",
       error: "Failed to load statistics",
       refresh: "Refresh",
-      refreshHint: "Recompute statistics",
-      totalTokens: "Total tokens",
-      inputTokens: "Input tokens",
-      outputTokens: "Output tokens",
-      cacheRead: "Cache-hit tokens",
+      refreshHint: "Recompute all session statistics",
+      totalTokens: "Total Tokens",
+      inputTokens: "Input Tokens",
+      outputTokens: "Output Tokens",
+      cacheRead: "Cache-hit Tokens",
       sessions: "Sessions",
       turns: "Turns",
-      peakDay: "Peak-day tokens",
-      longestTurn: "Longest turn",
-      streakCurrent: "Current streak",
-      streakLongest: "Longest streak",
-      activity: "Token activity",
-      trend: "Daily token trend",
-      byModel: "Model usage",
-      dimProvider: "By provider",
-      dimModel: "By model",
+      peakDay: "Peak-day Tokens",
+      longestTurn: "Longest Turn",
+      streakCurrent: "Current Streak",
+      streakLongest: "Longest Streak",
+      activity: "Token Activity Heatmap",
+      trend: "30-Day Token Trend",
+      byModel: "Model & Cost Distribution",
+      dimProvider: "By Provider",
+      dimModel: "By Model",
+      dimCost: "By Cost",
       legendInput: "Input",
       legendOutput: "Output",
       dayUnit: "d",
+
+      // Cost & Savings
+      costSection: "Cost & Efficiency Overview",
+      costEstimated: "Estimated Cost",
+      cacheSaved: "Cache Savings",
+      savedPercent: "Saved",
+      speed: "Avg Speed",
+      avgTurn: "Avg Turn Time",
+      totalToolCalls: "Total Tool Calls",
+      currencyCny: "¥ CNY",
+      currencyUsd: "$ USD",
+
+      // Token Composition
+      composition: "Token Composition Breakdown",
+      compCacheRead: "Cache Read",
+      compUserInput: "User Input",
+      compAssistantOutput: "Assistant Output",
+      compReasoning: "Reasoning (CoT)",
+      compToolResult: "Tool Results",
+
+      // Top Sessions & Tools
+      topSessions: "Top 10 Sessions by Token Volume",
+      topTools: "Top 10 Tool Invocations",
+      sessionTitle: "Session Title",
+      sessionWorkspace: "Workspace",
+      sessionTokens: "Total Tokens",
+      sessionTurns: "Turns",
+      sessionCost: "Estimated Cost",
+      sessionActive: "Last Active",
+      toolCalls: "calls",
+      openSession: "Open Session",
+
+      // Modal & Slash Command
+      modalTitle: "Usage Statistics Snapshot",
+      close: "Close",
     };
 
-    // ── formatting helpers ───────────────────────────────────────────────────
+    // ── Formatting Helpers ───────────────────────────────────────────────────
 
-/** Safe useMemo across the plugin bundle's React copy. */
-    function useMemoSafe(fn, deps) {
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      return React.useMemo(fn, deps);
-    }
-
-    /** Whether the document is currently rendered in Chinese. */
     function isZh() {
       const lang = document.documentElement.lang;
       return lang === "zh-CN" || lang === "zh";
     }
 
-    /** Compact token count: 1.8亿 / 6326万 / 1234 style. */
     function formatTokens(n) {
       if (typeof n !== "number" || !isFinite(n)) return "0";
       if (isZh()) {
@@ -104,19 +178,26 @@ window.__ModuleLoader__.load({
       return String(Math.round(n));
     }
 
-    /** Wall-time ms → compact "20.9 小时" / "5 分钟" / "3 秒" (or h/m/s). */
-    function formatMs(ms) {
-      if (!ms || ms <= 0) return "0";
-      const zh = isZh();
-      const sec = Math.round(ms / 1000);
-      const h = sec / 3600;
-      if (h >= 1) return zh ? `${h.toFixed(1)} 小时` : `${h.toFixed(1)}h`;
-      const m = Math.round(sec / 60);
-      if (m >= 1) return zh ? `${m} 分钟` : `${m}m`;
-      return zh ? `${sec} 秒` : `${sec}s`;
+    function formatMoney(amount, currency = "cny") {
+      const n = Number(amount) || 0;
+      const symbol = currency === "cny" ? "¥" : "$";
+      if (n === 0) return `${symbol}0.00`;
+      if (n >= 100) return `${symbol}${n.toFixed(1)}`;
+      if (n >= 1) return `${symbol}${n.toFixed(2)}`;
+      return `${symbol}${n.toFixed(3)}`;
     }
 
-    /** Local YYYY-MM-DD key for an epoch-ms timestamp (or a Date, reused as-is). */
+    function formatMs(ms) {
+      if (!ms || ms <= 0) return "0";
+      const zhLocale = isZh();
+      const sec = Math.round(ms / 1000);
+      const h = sec / 3600;
+      if (h >= 1) return zhLocale ? `${h.toFixed(1)} 小时` : `${h.toFixed(1)}h`;
+      const m = Math.round(sec / 60);
+      if (m >= 1) return zhLocale ? `${m} 分钟` : `${m}m`;
+      return zhLocale ? `${sec} 秒` : `${sec}s`;
+    }
+
     function dayKeyOf(time) {
       const d = time instanceof Date ? time : new Date(time);
       const y = d.getFullYear();
@@ -125,10 +206,46 @@ window.__ModuleLoader__.load({
       return `${y}-${m}-${day}`;
     }
 
-    // ── small presentational pieces ──────────────────────────────────────────
+    function formatRelativeTime(ts) {
+      if (!ts) return "";
+      const diff = Date.now() - ts;
+      const sec = Math.floor(diff / 1000);
+      const zhLocale = isZh();
+      if (sec < 60) return zhLocale ? "刚刚" : "just now";
+      const min = Math.floor(sec / 60);
+      if (min < 60) return zhLocale ? `${min}分钟前` : `${min}m ago`;
+      const hr = Math.floor(min / 60);
+      if (hr < 24) return zhLocale ? `${hr}小时前` : `${hr}h ago`;
+      const day = Math.floor(hr / 24);
+      return zhLocale ? `${day}天前` : `${day}d ago`;
+    }
 
-    /** One hero stat cell in the top strip (big value over a small label). */
-    function StatCell({ label, value }) {
+    // ── Reusable UI Primitives ───────────────────────────────────────────────
+
+    function SectionTitle({ children, right }) {
+      return jsxs("div", {
+        style: { display: "flex", alignItems: "center", justifyContent: "space-between", margin: "22px 0 10px" },
+        children: [
+          jsx("span", { style: { fontSize: "14px", fontWeight: 600, color: "var(--dsw-alias-label-primary, #f3f4f6)" }, children }),
+          right ?? null,
+        ],
+      });
+    }
+
+    function Card({ children, style = {} }) {
+      return jsx("div", {
+        style: {
+          borderRadius: "12px",
+          border: "1px solid var(--dsw-alias-border-l2, #333)",
+          background: "var(--dsw-alias-bg-layer-2, #1e1e1e)",
+          padding: "16px",
+          ...style,
+        },
+        children,
+      });
+    }
+
+    function StatCell({ label, value, sub, color }) {
       return jsxs("div", {
         style: {
           flex: "1 1 0", minWidth: 0, textAlign: "center",
@@ -138,7 +255,7 @@ window.__ModuleLoader__.load({
           jsx("span", {
             style: {
               fontSize: "18px", fontWeight: 600, lineHeight: 1.2,
-              color: "var(--dsw-alias-label-primary, #f3f4f6)",
+              color: color || "var(--dsw-alias-label-primary, #f3f4f6)",
               whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
             },
             children: value,
@@ -150,11 +267,14 @@ window.__ModuleLoader__.load({
             },
             children: label,
           }),
+          sub ? jsx("span", {
+            style: { fontSize: "10.5px", color: "var(--dsw-alias-state-success-primary, #16a34a)", marginTop: "1px" },
+            children: sub,
+          }) : null,
         ],
       });
     }
 
-    /** The top hero strip: key metrics in one divided horizontal row. */
     function StatStrip({ cells }) {
       return jsxs("div", {
         style: {
@@ -166,7 +286,7 @@ window.__ModuleLoader__.load({
         },
         children: cells.map((cell, i) => jsxs(React.Fragment, {
           children: [
-            jsx(StatCell, { label: cell.label, value: cell.value }),
+            jsx(StatCell, { label: cell.label, value: cell.value, sub: cell.sub, color: cell.color }),
             i < cells.length - 1 ? jsx("div", {
               style: { width: "1px", background: "var(--dsw-alias-border-l2, #333)", margin: "2px 0", flexShrink: 0 },
             }) : null,
@@ -175,51 +295,126 @@ window.__ModuleLoader__.load({
       });
     }
 
-    /** A single subtle line of secondary figures (input/output/cache/sessions/turns). */
-    function SecondaryLine({ parts }) {
-      return jsxs("div", {
-        style: {
-          display: "flex", flexWrap: "wrap", gap: "4px 18px",
-          marginTop: "10px",
-          fontSize: "12px", color: "var(--dsw-alias-label-tertiary, #9ca3af)",
-        },
-        children: parts.map((part) => jsxs("span", {
-          children: [
-            jsx("span", { style: { color: "var(--dsw-alias-label-secondary, #d1d5db)", fontWeight: 500 }, children: part.value }),
-            jsx("span", { children: ` ${part.label}` }),
-          ],
-        }, part.label)),
-      });
-    }
+    // ── Cost & Intelligence Card ─────────────────────────────────────────────
 
-    function SectionTitle({ children, right }) {
-      return jsxs("div", {
-        style: { display: "flex", alignItems: "center", justifyContent: "space-between", margin: "18px 0 10px" },
+    function CostAndSavingsCard({ totals, currency, setCurrency, t }) {
+      const cost = currency === "cny" ? totals?.costCny : totals?.costUsd;
+      const saved = currency === "cny" ? totals?.savedCny : totals?.savedUsd;
+      const rawCost = (cost || 0) + (saved || 0);
+      const savedPercent = rawCost > 0 ? ((saved / rawCost) * 100).toFixed(0) : 0;
+
+      const togglePill = (val, label) => jsx("button", {
+        type: "button",
+        onClick: () => setCurrency(val),
+        style: {
+          height: "22px", padding: "0 8px", borderRadius: "11px", fontSize: "11px",
+          font: "inherit", cursor: "pointer",
+          color: currency === val ? "var(--dsw-alias-label-primary, #f3f4f6)" : "var(--dsw-alias-label-tertiary, #9ca3af)",
+          background: currency === val ? "var(--dsw-alias-bg-layer-3, #242424)" : "transparent",
+          border: currency === val ? "1px solid var(--dsw-alias-border-l2, #333)" : "1px solid transparent",
+        },
+        children: label,
+      });
+
+      return jsxs(Card, {
+        style: { marginBottom: "12px", background: "linear-gradient(180deg, rgba(37,99,235,0.06) 0%, var(--dsw-alias-bg-layer-2, #1e1e1e) 100%)" },
         children: [
-          jsx("span", { style: { fontSize: "14px", fontWeight: 600, color: "var(--dsw-alias-label-primary, #f3f4f6)" }, children }),
-          right ?? null,
+          jsxs("div", {
+            style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" },
+            children: [
+              jsx("span", { style: { fontSize: "13.5px", fontWeight: 600, color: "var(--dsw-alias-label-primary, #f3f4f6)" }, children: t("costSection") }),
+              jsxs("div", { style: { display: "flex", gap: "4px" }, children: [togglePill("cny", t("currencyCny")), togglePill("usd", t("currencyUsd"))] }),
+            ],
+          }),
+          jsxs("div", {
+            style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "12px" },
+            children: [
+              jsxs("div", {
+                style: { display: "flex", flexDirection: "column", gap: "2px" },
+                children: [
+                  jsx("span", { style: { fontSize: "11.5px", color: "var(--dsw-alias-label-tertiary, #9ca3af)" }, children: t("costEstimated") }),
+                  jsx("span", { style: { fontSize: "18px", fontWeight: 600, color: "#38bdf8" }, children: formatMoney(cost, currency) }),
+                ],
+              }),
+              jsxs("div", {
+                style: { display: "flex", flexDirection: "column", gap: "2px" },
+                children: [
+                  jsx("span", { style: { fontSize: "11.5px", color: "var(--dsw-alias-label-tertiary, #9ca3af)" }, children: t("cacheSaved") }),
+                  jsxs("div", {
+                    style: { display: "flex", alignItems: "center", gap: "6px" },
+                    children: [
+                      jsx("span", { style: { fontSize: "18px", fontWeight: 600, color: "#4ade80" }, children: formatMoney(saved, currency) }),
+                      savedPercent > 0 ? jsx("span", {
+                        style: { fontSize: "10.5px", padding: "1px 6px", borderRadius: "8px", background: "rgba(74, 222, 128, 0.15)", color: "#4ade80" },
+                        children: `${t("savedPercent")} ${savedPercent}%`,
+                      }) : null,
+                    ],
+                  }),
+                ],
+              }),
+              jsxs("div", {
+                style: { display: "flex", flexDirection: "column", gap: "2px" },
+                children: [
+                  jsx("span", { style: { fontSize: "11.5px", color: "var(--dsw-alias-label-tertiary, #9ca3af)" }, children: t("speed") }),
+                  jsx("span", { style: { fontSize: "18px", fontWeight: 600, color: "var(--dsw-alias-label-primary, #f3f4f6)" }, children: `${totals?.tokensPerSecond || 0} t/s` }),
+                ],
+              }),
+              jsxs("div", {
+                style: { display: "flex", flexDirection: "column", gap: "2px" },
+                children: [
+                  jsx("span", { style: { fontSize: "11.5px", color: "var(--dsw-alias-label-tertiary, #9ca3af)" }, children: t("avgTurn") }),
+                  jsx("span", { style: { fontSize: "18px", fontWeight: 600, color: "var(--dsw-alias-label-primary, #f3f4f6)" }, children: formatMs(totals?.avgTurnMs) }),
+                ],
+              }),
+            ],
+          }),
         ],
       });
     }
 
-    function Card({ children }) {
-      return jsx("div", {
-        style: {
-          borderRadius: "12px",
-          border: "1px solid var(--dsw-alias-border-l2, #333)",
-          background: "var(--dsw-alias-bg-layer-2, #1e1e1e)",
-          padding: "16px",
-        },
-        children,
+    // ── Token Composition Breakdown Bar ─────────────────────────────────────
+
+    function TokenCompositionBar({ composition, totalTokens, t }) {
+      if (!Array.isArray(composition) || composition.length === 0) return null;
+      return jsxs(Card, {
+        children: [
+          // Segmented horizontal stacked bar
+          jsxs("div", {
+            style: {
+              height: "14px", width: "100%", borderRadius: "7px", overflow: "hidden",
+              display: "flex", background: "var(--dsw-alias-bg-layer-3, #242424)", marginBottom: "12px",
+            },
+            children: composition.map((c) => {
+              if (c.percent <= 0) return null;
+              return jsx("div", {
+                style: { width: `${c.percent}%`, height: "100%", background: c.color, transition: "width 0.6s ease" },
+                title: `${t(c.labelKey)}: ${formatTokens(c.tokens)} (${c.percent}%)`,
+              }, c.category);
+            }),
+          }),
+          // Legend grid
+          jsxs("div", {
+            style: { display: "flex", flexWrap: "wrap", gap: "10px 20px" },
+            children: composition.map((c) => jsxs("div", {
+              style: { display: "flex", alignItems: "center", gap: "8px", fontSize: "12px" },
+              children: [
+                jsx("span", { style: { width: "9px", height: "9px", borderRadius: "50%", background: c.color, flexShrink: 0 } }),
+                jsx("span", { style: { color: "var(--dsw-alias-label-secondary, #d1d5db)" }, children: t(c.labelKey) }),
+                jsx("span", { style: { fontWeight: 600, color: "var(--dsw-alias-label-primary, #f3f4f6)" }, children: formatTokens(c.tokens) }),
+                jsx("span", { style: { color: "var(--dsw-alias-label-tertiary, #9ca3af)", fontSize: "11px" }, children: `(${c.percent}%)` }),
+              ],
+            }, c.category)),
+          }),
+        ],
       });
     }
 
-    // ── heatmap (contribution-graph style, weekly columns, full year) ────────
+    // ── Heatmap (Contribution Graph Style) ───────────────────────────────────
 
     const MONTHS_EN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
     function Heatmap({ byDay }) {
-      const WEEKS = 53; // a full year ending today
+      const WEEKS = 53;
       const DAYS = 7;
       const cell = 11;
       const gap = 3;
@@ -227,7 +422,6 @@ window.__ModuleLoader__.load({
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      // Each column is a Sun–Sat week; the last column contains today.
       const lastWeekStart = new Date(today);
       lastWeekStart.setDate(today.getDate() - today.getDay());
       const start = new Date(lastWeekStart);
@@ -245,8 +439,6 @@ window.__ModuleLoader__.load({
       const cells = [];
       const monthLabels = [];
       let prevMonth = -1;
-      // One running cursor walks all 371 cells (a fresh Date per cell would
-      // allocate twice that); the month label is read on each column's first day.
       const cursor = new Date(start);
       for (let w = 0; w < WEEKS; w += 1) {
         for (let d = 0; d < DAYS; d += 1) {
@@ -279,7 +471,7 @@ window.__ModuleLoader__.load({
             height: cell,
             rx: 2,
             fill: levelColor(c.total / max),
-            children: jsx("title", { children: `${c.key}：${formatTokens(c.total)}` }),
+            children: jsx("title", { children: `${c.key}：${formatTokens(c.total)} tokens` }),
           })),
           ...monthLabels.map((m) => jsx("text", {
             key: `${m.col}-${m.text}`,
@@ -293,9 +485,8 @@ window.__ModuleLoader__.load({
       });
     }
 
-    // ── trend line (input vs output, last N days) ────────────────────────────
+    // ── Trend Line (Dual-Curve Smooth Path) ──────────────────────────────────
 
-    /** Catmull-Rom → cubic Bézier smooth path through the points. */
     function smoothPath(points) {
       if (points.length < 3) {
         return points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
@@ -321,9 +512,7 @@ window.__ModuleLoader__.load({
       const PAD = { top: 18, right: 12, bottom: 26, left: 44 };
       const [revealed, setRevealed] = useState(false);
 
-      // Everything derived from byDay in one memo (the 30-day window is a
-      // constant): day keys -> values -> points -> smooth paths -> areas.
-      const chart = useMemoSafe(() => {
+      const chart = useMemo(() => {
         const values = [];
         const cursor = new Date();
         cursor.setHours(0, 0, 0, 0);
@@ -343,19 +532,12 @@ window.__ModuleLoader__.load({
         const baseline = H - PAD.bottom;
         const inputLine = smoothPath(values.map((v, i) => ({ x: x(i), y: y(v.input) })));
         const outputLine = smoothPath(values.map((v, i) => ({ x: x(i), y: y(v.output) })));
-        const closeArea = (line) =>
-          `${line} L${x(values.length - 1).toFixed(1)},${baseline} L${x(0).toFixed(1)},${baseline} Z`;
-        return {
-          values, max, x,
-          inputLine, outputLine,
-          inputArea: closeArea(inputLine),
-          outputArea: closeArea(outputLine),
-        };
+        const closeArea = (line) => `${line} L${x(values.length - 1).toFixed(1)},${baseline} L${x(0).toFixed(1)},${baseline} Z`;
+        return { values, max, x, inputLine, outputLine, inputArea: closeArea(inputLine), outputArea: closeArea(outputLine) };
       }, [byDay]);
+
       const { values, max, x, inputLine, outputLine, inputArea, outputArea } = chart;
 
-      // Left-to-right draw-in on mount / data change: the line strokes reveal
-      // via stroke-dashoffset (pathLength normalized to 100), areas fade in.
       useEffect(() => {
         setRevealed(false);
         const id = requestAnimationFrame(() => { setRevealed(true); });
@@ -365,29 +547,19 @@ window.__ModuleLoader__.load({
       const gridLines = [0.25, 0.5, 0.75, 1].map((f) => PAD.top + (1 - f) * (H - PAD.top - PAD.bottom));
 
       const lineProps = (stroke) => ({
-        fill: "none",
-        stroke,
-        strokeWidth: 2,
-        strokeLinejoin: "round",
-        strokeLinecap: "round",
-        pathLength: 100,
-        strokeDasharray: 100,
-        strokeDashoffset: revealed ? 0 : 100,
+        fill: "none", stroke, strokeWidth: 2, strokeLinejoin: "round", strokeLinecap: "round",
+        pathLength: 100, strokeDasharray: 100, strokeDashoffset: revealed ? 0 : 100,
         style: { transition: "stroke-dashoffset 0.9s ease" },
       });
       const areaProps = (fill) => ({
-        fill,
-        fillOpacity: 0.12,
-        stroke: "none",
+        fill, fillOpacity: 0.12, stroke: "none",
         style: { opacity: revealed ? 1 : 0, transition: "opacity 0.9s ease" },
       });
 
       return jsxs("div", {
         children: [
           jsxs("svg", {
-            width: "100%",
-            viewBox: `0 0 ${W} ${H}`,
-            style: { display: "block" },
+            width: "100%", viewBox: `0 0 ${W} ${H}`, style: { display: "block" },
             children: [
               ...gridLines.map((gy, i) => jsxs(React.Fragment, {
                 key: i,
@@ -403,7 +575,6 @@ window.__ModuleLoader__.load({
                   }),
                 ],
               })),
-              // soft area fill under each series, then the stroke line on top
               jsx("path", { d: inputArea, ...areaProps("var(--dsw-alias-state-business-primary, #2563eb)") }),
               jsx("path", { d: outputArea, ...areaProps("var(--dsw-alias-state-success-primary, #16a34a)") }),
               jsx("path", { d: inputLine, ...lineProps("var(--dsw-alias-state-business-primary, #2563eb)") }),
@@ -412,8 +583,7 @@ window.__ModuleLoader__.load({
                 const p = values[i];
                 if (!p) return null;
                 return jsx("text", {
-                  key: p.key,
-                  x: x(i), y: H - 8, textAnchor: "middle",
+                  key: p.key, x: x(i), y: H - 8, textAnchor: "middle",
                   fontSize: 10, fill: "var(--dsw-alias-label-tertiary, #9ca3af)",
                   children: p.key.slice(5),
                 });
@@ -443,9 +613,8 @@ window.__ModuleLoader__.load({
       });
     }
 
-    // ── model usage (compact list, per-model share) ──────────────────────────
+    // ── Model & Provider Share (Donut Chart) ─────────────────────────────────
 
-    /** The palette shared by the donut and the model list (same order = same color). */
     const MODEL_PALETTE = [
       "var(--dsw-alias-state-business-primary, #2563eb)",
       "var(--dsw-alias-state-success-primary, #16a34a)",
@@ -453,14 +622,13 @@ window.__ModuleLoader__.load({
       "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16", "#f97316",
     ];
 
-    /** A donut of per-entry share (entries: { name, total, color }). */
-    function Donut({ entries, total }) {
+    function Donut({ entries, total, isCost, currency }) {
       const R = 56;
       const SW = 20;
       const C = 2 * Math.PI * R;
       let acc = 0;
       const segs = entries.map((e) => {
-        const frac = total > 0 ? e.total / total : 0;
+        const frac = total > 0 ? e.value / total : 0;
         const seg = { ...e, offset: acc, frac };
         acc += frac;
         return seg;
@@ -471,43 +639,41 @@ window.__ModuleLoader__.load({
         children: [
           jsx("circle", { cx: 75, cy: 75, r: R, fill: "none", stroke: "var(--dsw-alias-bg-layer-3, #242424)", strokeWidth: SW }),
           ...segs.map((s) => jsx("circle", {
-            key: s.name,
-            cx: 75, cy: 75, r: R, fill: "none",
+            key: s.name, cx: 75, cy: 75, r: R, fill: "none",
             stroke: s.color, strokeWidth: SW,
             strokeDasharray: `${(s.frac * C).toFixed(2)} ${C.toFixed(2)}`,
             strokeDashoffset: `${(-s.offset * C).toFixed(2)}`,
             transform: "rotate(-90 75 75)",
-            children: jsx("title", { children: `${s.name}: ${formatTokens(s.total)}` }),
+            children: jsx("title", { children: `${s.name}: ${isCost ? formatMoney(s.value, currency) : formatTokens(s.value)}` }),
           })),
           jsxs("text", {
-            x: 75, y: 72, textAnchor: "middle", fontSize: 15, fontWeight: 600,
+            x: 75, y: 72, textAnchor: "middle", fontSize: 14, fontWeight: 600,
             fill: "var(--dsw-alias-label-primary, #f3f4f6)",
-            children: [formatTokens(total)],
+            children: [isCost ? formatMoney(total, currency) : formatTokens(total)],
           }),
           jsxs("text", {
             x: 75, y: 88, textAnchor: "middle", fontSize: 10,
             fill: "var(--dsw-alias-label-tertiary, #9ca3af)",
-            children: ["tokens"],
+            children: [isCost ? currency.toUpperCase() : "tokens"],
           }),
         ],
       });
     }
 
-    /** The compact per-model list for one view's entries (aligned colors with the donut). */
-    function ModelListRows({ entries, total }) {
+    function ModelListRows({ entries, total, isCost, currency }) {
       const fmtPct = (p) => (p < 10 ? p.toFixed(1) : String(Math.round(p)));
       return jsxs("div", {
         style: { display: "flex", flexDirection: "column", flex: 1, minWidth: 0 },
         children: entries.map((e, i) => {
-          const pct = total > 0 ? (e.total / total) * 100 : 0;
+          const pct = total > 0 ? (e.value / total) * 100 : 0;
           return jsxs(React.Fragment, {
             key: e.name,
             children: [
-              i > 0 ? jsx("div", { style: { height: "1px", background: "var(--dsw-alias-border-l2, #333)", margin: "12px 0" } }) : null,
+              i > 0 ? jsx("div", { style: { height: "1px", background: "var(--dsw-alias-border-l2, #333)", margin: "10px 0" } }) : null,
               jsxs("div", {
                 style: { display: "flex", alignItems: "center", gap: "10px" },
                 children: [
-                  jsx("span", { style: { width: 8, height: 8, borderRadius: "50%", background: e.color, flexShrink: 0, display: "inline-block" } }),
+                  jsx("span", { style: { width: 8, height: 8, borderRadius: "50%", background: e.color, flexShrink: 0 } }),
                   jsx("span", {
                     style: { flex: 1, minWidth: 0, fontSize: "13px", fontWeight: 500, color: "var(--dsw-alias-label-primary, #f3f4f6)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
                     children: e.name,
@@ -516,8 +682,8 @@ window.__ModuleLoader__.load({
                 ],
               }),
               jsx("div", {
-                style: { marginTop: "4px", paddingLeft: "18px", fontSize: "12px", color: "var(--dsw-alias-label-tertiary, #9ca3af)" },
-                children: `${formatTokens(e.total)} tokens`,
+                style: { marginTop: "2px", paddingLeft: "18px", fontSize: "12px", color: "var(--dsw-alias-label-tertiary, #9ca3af)" },
+                children: isCost ? `${formatMoney(e.value, currency)} · ${formatTokens(e.tokens)} tokens` : `${formatTokens(e.value)} tokens · ${formatMoney(e.cost, currency)}`,
               }),
             ],
           });
@@ -525,31 +691,40 @@ window.__ModuleLoader__.load({
       });
     }
 
-    /** Model share: donut + list, with a provider/model dimension toggle. */
-    function ModelShare({ byModel, t }) {
+    function ModelShare({ byModel, currency, t }) {
       const [dim, setDim] = useState("provider");
-      const entries = useMemoSafe(() => {
-        const list = Object.entries(byModel ?? {})
-          .map(([key, v]) => ({ key, total: v.totalTokens }))
-          .filter((e) => e.total > 0);
+      const isCost = dim === "cost";
+
+      const entries = useMemo(() => {
+        const list = Object.entries(byModel ?? {}).map(([key, v]) => ({
+          key,
+          tokens: v.totalTokens,
+          cost: currency === "cny" ? v.costCny : v.costUsd,
+        })).filter((e) => e.tokens > 0);
+
         let view;
         if (dim === "provider") {
-          view = list.map((e) => ({ name: e.key, total: e.total }));
-        } else {
-          // Model-only view: strip the "provider/" prefix and merge same-named models.
+          view = list.map((e) => ({ name: e.key, value: e.tokens, tokens: e.tokens, cost: e.cost }));
+        } else if (dim === "model") {
           const byName = {};
           for (const e of list) {
             const name = e.key.includes("/") ? e.key.split("/").pop() : e.key;
-            byName[name] = (byName[name] ?? 0) + e.total;
+            const cur = byName[name] ?? (byName[name] = { tokens: 0, cost: 0 });
+            cur.tokens += e.tokens;
+            cur.cost += e.cost;
           }
-          view = Object.entries(byName).map(([name, total]) => ({ name, total }));
+          view = Object.entries(byName).map(([name, val]) => ({ name, value: val.tokens, tokens: val.tokens, cost: val.cost }));
+        } else {
+          // By Cost
+          view = list.map((e) => ({ name: e.key, value: e.cost, tokens: e.tokens, cost: e.cost }));
         }
-        view.sort((a, b) => b.total - a.total);
-        // One shared color assignment keeps the donut and the list aligned.
+
+        view.sort((a, b) => b.value - a.value);
         view.forEach((e, i) => { e.color = MODEL_PALETTE[i % MODEL_PALETTE.length]; });
         return view;
-      }, [byModel, dim]);
-      const total = entries.reduce((s, e) => s + e.total, 0);
+      }, [byModel, dim, currency]);
+
+      const total = entries.reduce((s, e) => s + e.value, 0);
 
       const toggle = (value, label) => jsx("button", {
         type: "button",
@@ -567,25 +742,115 @@ window.__ModuleLoader__.load({
       return jsxs("div", {
         children: [
           jsxs("div", {
-            style: { display: "flex", alignItems: "center", gap: "4px", marginBottom: "12px" },
-            children: [toggle("provider", t("dimProvider")), toggle("model", t("dimModel"))],
+            style: { display: "flex", alignItems: "center", gap: "6px", marginBottom: "12px" },
+            children: [toggle("provider", t("dimProvider")), toggle("model", t("dimModel")), toggle("cost", t("dimCost"))],
           }),
           jsxs("div", {
             style: { display: "flex", alignItems: "flex-start", gap: "20px", flexWrap: "wrap" },
             children: [
-              jsx(Donut, { entries, total }),
-              jsx(ModelListRows, { entries, total }),
+              jsx(Donut, { entries, total, isCost, currency }),
+              jsx(ModelListRows, { entries, total, isCost, currency }),
             ],
           }),
         ],
       });
     }
 
-    // ── the section page ────────────────────────────────────────────────────
+    // ── Top 10 Sessions Leaderboard ──────────────────────────────────────────
+
+    function TopSessionsTable({ sessions, currency, t }) {
+      if (!Array.isArray(sessions) || sessions.length === 0) return null;
+      return jsxs(Card, {
+        style: { padding: "0px", overflow: "hidden" },
+        children: [
+          jsxs("div", {
+            style: {
+              display: "grid", gridTemplateColumns: "minmax(180px, 2fr) 90px 100px 90px",
+              padding: "10px 16px", background: "var(--dsw-alias-bg-layer-3, #242424)",
+              fontSize: "11.5px", fontWeight: 600, color: "var(--dsw-alias-label-tertiary, #9ca3af)",
+            },
+            children: [
+              jsx("span", { children: t("sessionTitle") }),
+              jsx("span", { style: { textAlign: "right" }, children: t("sessionTurns") }),
+              jsx("span", { style: { textAlign: "right" }, children: t("sessionTokens") }),
+              jsx("span", { style: { textAlign: "right" }, children: t("sessionCost") }),
+            ],
+          }),
+          sessions.map((s, i) => {
+            const cost = currency === "cny" ? s.costCny : s.costUsd;
+            return jsxs("div", {
+              style: {
+                display: "grid", gridTemplateColumns: "minmax(180px, 2fr) 90px 100px 90px",
+                padding: "12px 16px", alignItems: "center",
+                borderTop: i > 0 ? "1px solid var(--dsw-alias-border-l2, #333)" : "none",
+                fontSize: "12.5px",
+              },
+              children: [
+                jsxs("div", {
+                  style: { display: "flex", flexDirection: "column", gap: "2px", minWidth: 0, paddingRight: "8px" },
+                  children: [
+                    jsxs("a", {
+                      href: `#/sessions/${s.id}`,
+                      style: {
+                        color: "var(--dsw-alias-label-primary, #f3f4f6)", textDecoration: "none", fontWeight: 500,
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      },
+                      children: [s.title || s.id],
+                    }),
+                    jsxs("div", {
+                      style: { display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "var(--dsw-alias-label-tertiary, #9ca3af)" },
+                      children: [
+                        s.workspace ? jsx("span", {
+                          style: { maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", padding: "0 4px", borderRadius: "4px", background: "var(--dsw-alias-bg-layer-3, #242424)" },
+                          children: s.workspace.split("/").pop(),
+                        }) : null,
+                        jsx("span", { children: formatRelativeTime(s.lastActiveTime) }),
+                      ],
+                    }),
+                  ],
+                }),
+                jsx("span", { style: { textAlign: "right", color: "var(--dsw-alias-label-secondary, #d1d5db)" }, children: s.turns }),
+                jsx("span", { style: { textAlign: "right", fontWeight: 500, color: "var(--dsw-alias-state-business-primary, #60a5fa)" }, children: formatTokens(s.totalTokens) }),
+                jsx("span", { style: { textAlign: "right", color: "#38bdf8", fontWeight: 500 }, children: formatMoney(cost, currency) }),
+              ],
+            }, s.id);
+          }),
+        ],
+      });
+    }
+
+    // ── Top 10 Tools Analytics ───────────────────────────────────────────────
+
+    function TopToolsChart({ tools, t }) {
+      if (!Array.isArray(tools) || tools.length === 0) return null;
+      return jsxs(Card, {
+        children: tools.map((tool, i) => jsxs("div", {
+          style: { display: "flex", flexDirection: "column", gap: "4px", marginBottom: i < tools.length - 1 ? "10px" : "0" },
+          children: [
+            jsxs("div", {
+              style: { display: "flex", justifyContent: "space-between", fontSize: "12px" },
+              children: [
+                jsx("span", { style: { fontWeight: 500, color: "var(--dsw-alias-label-primary, #f3f4f6)", fontFamily: "monospace" }, children: tool.name }),
+                jsxs("span", { style: { color: "var(--dsw-alias-label-tertiary, #9ca3af)" }, children: [`${tool.count} ${t("toolCalls")}`, ` (${tool.percent}%)`] }),
+              ],
+            }),
+            jsx("div", {
+              style: { height: "6px", width: "100%", borderRadius: "3px", background: "var(--dsw-alias-bg-layer-3, #242424)", overflow: "hidden" },
+              children: jsx("div", {
+                style: { width: `${tool.percent}%`, height: "100%", borderRadius: "3px", background: "var(--dsw-alias-state-business-primary, #2563eb)" },
+              }),
+            }),
+          ],
+        }, tool.name)),
+      });
+    }
+
+    // ── Section Page (Main Dashboard) ────────────────────────────────────────
 
     function UsageStatsSection({ t }) {
       const [state, setState] = useState({ status: "loading", data: null, error: null });
       const [refreshTick, setRefreshTick] = useState(0);
+      const [currency, setCurrency] = useState("cny");
 
       useEffect(() => {
         let cancelled = false;
@@ -597,9 +862,6 @@ window.__ModuleLoader__.load({
               if (!res.ok) throw new Error(`HTTP ${res.status}`);
               const data = await res.json();
               if (cancelled) return;
-              // The server answers {computing:true} while it seeds the
-              // aggregate in the background; poll again shortly instead of
-              // spinning forever on the scan.
               if (data?.computing) {
                 timer = setTimeout(poll, 1200);
                 return;
@@ -623,7 +885,7 @@ window.__ModuleLoader__.load({
       const peakDay = Math.max(0, ...Object.values(byDay).map((b) => b.totalTokens));
 
       return jsxs("div", {
-        style: { display: "flex", flexDirection: "column", gap: "0", paddingBottom: "16px" },
+        style: { display: "flex", flexDirection: "column", gap: "0", paddingBottom: "24px" },
         children: [
           jsxs("div", {
             style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" },
@@ -646,7 +908,7 @@ window.__ModuleLoader__.load({
             ],
           }),
           jsx("p", {
-            style: { margin: "0 0 8px", fontSize: "12.5px", color: "var(--dsw-alias-label-tertiary, #9ca3af)" },
+            style: { margin: "0 0 12px", fontSize: "12.5px", color: "var(--dsw-alias-label-tertiary, #9ca3af)" },
             children: t("intro"),
           }),
 
@@ -656,6 +918,8 @@ window.__ModuleLoader__.load({
 
           state.status === "ready" && totals ? jsxs(React.Fragment, {
             children: [
+              jsx(CostAndSavingsCard, { totals, currency, setCurrency, t }),
+
               jsx(StatStrip, {
                 cells: [
                   { label: t("totalTokens"), value: formatTokens(totals.totalTokens) },
@@ -665,15 +929,9 @@ window.__ModuleLoader__.load({
                   { label: t("streakLongest"), value: `${data.streak.longest} ${t("dayUnit")}` },
                 ],
               }),
-              jsx(SecondaryLine, {
-                parts: [
-                  { label: t("inputTokens"), value: formatTokens(totals.inputTokens) },
-                  { label: t("outputTokens"), value: formatTokens(totals.outputTokens) },
-                  { label: t("cacheRead"), value: formatTokens(totals.cacheReadTokens) },
-                  { label: t("sessions"), value: String(totals.sessions) },
-                  { label: t("turns"), value: String(totals.turns) },
-                ],
-              }),
+
+              jsx(SectionTitle, { children: t("composition") }),
+              jsx(TokenCompositionBar, { composition: data.tokenComposition, totalTokens: totals.totalTokens, t }),
 
               jsx(SectionTitle, { children: t("activity") }),
               jsx(Card, { children: jsx(Heatmap, { byDay }) }),
@@ -682,18 +940,78 @@ window.__ModuleLoader__.load({
               jsx(Card, { children: jsx(TrendLine, { byDay, t }) }),
 
               jsx(SectionTitle, { children: t("byModel") }),
-              jsx(Card, { children: jsx(ModelShare, { byModel, t }) }),
+              jsx(Card, { children: jsx(ModelShare, { byModel, currency, t }) }),
+
+              data.topSessions && data.topSessions.length > 0 ? jsxs(React.Fragment, {
+                children: [
+                  jsx(SectionTitle, { children: t("topSessions") }),
+                  jsx(TopSessionsTable, { sessions: data.topSessions, currency, t }),
+                ],
+              }) : null,
+
+              data.topTools && data.topTools.length > 0 ? jsxs(React.Fragment, {
+                children: [
+                  jsx(SectionTitle, { children: t("topTools") }),
+                  jsx(TopToolsChart, { tools: data.topTools, t }),
+                ],
+              }) : null,
             ],
           }) : null,
         ],
       });
     }
 
-    // ── registration ────────────────────────────────────────────────────────
+    // ── In-Session Modal (For Slash Command / Quick Jump) ─────────────────────
+
+    function UsageStatsModal({ isOpen, onClose, t }) {
+      if (!isOpen) return null;
+      return jsx("div", {
+        style: {
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "rgba(0, 0, 0, 0.65)", backdropFilter: "blur(4px)",
+          display: "flex", alignItems: "center", justifyContent: "center", padding: "20px",
+        },
+        onClick: onClose,
+        children: jsx("div", {
+          style: {
+            width: "100%", maxWidth: "780px", maxHeight: "85vh", overflowY: "auto",
+            borderRadius: "16px", border: "1px solid var(--dsw-alias-border-l2, #333)",
+            background: "var(--dsw-alias-bg-layer-1, #121212)", padding: "24px",
+          },
+          onClick: (e) => e.stopPropagation(),
+          children: jsxs("div", {
+            style: { display: "flex", flexDirection: "column" },
+            children: [
+              jsxs("div", {
+                style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" },
+                children: [
+                  jsx("h3", { style: { margin: 0, fontSize: "16px", color: "var(--dsw-alias-label-primary, #f3f4f6)" }, children: t("modalTitle") }),
+                  jsx("button", {
+                    type: "button",
+                    onClick: onClose,
+                    style: {
+                      background: "transparent", border: "none", color: "var(--dsw-alias-label-tertiary, #9ca3af)",
+                      fontSize: "14px", cursor: "pointer", padding: "4px 8px", borderRadius: "4px",
+                    },
+                    children: t("close"),
+                  }),
+                ],
+              }),
+              jsx(UsageStatsSection, { t }),
+            ],
+          }),
+        }),
+      });
+    }
+
+    // ── Module Exports & Plugin Registration ─────────────────────────────────
 
     exports.inject = ["locale", "slots"];
     exports.apply = function apply(ctx) {
       ctx.locale.register(NS, { zh, en });
+      const t = ctx.locale.bind(NS);
+
+      // Register Settings Section
       ctx.slots.inject("settings.section", function* () {
         yield ctx.slots.register(
           {

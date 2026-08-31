@@ -1,7 +1,7 @@
 {
   "name": "dsh-plugin-usage-stats",
-  "version": "0.1.0",
-  "description": "DeepSeek Harness plugin adding a Usage Statistics section to the Web settings sidebar: token totals, daily activity heatmap, daily token trend, and per-model share, aggregated from all session logs.",
+  "version": "0.2.0",
+  "description": "DeepSeek Harness plugin for AI usage & cost intelligence: token totals, cost estimation ($/¥), cache savings, 5-way token composition, 365-day activity heatmap, 30-day token trend, model breakdown, top sessions leaderboard, and tool analytics.",
   "type": "module",
   "scripts": {
     "smoke": "node scripts/smoke.mjs",
@@ -38,8 +38,11 @@
     "cordis",
     "usage",
     "statistics",
+    "cost",
+    "pricing",
     "tokens",
-    "settings"
+    "settings",
+    "context"
   ],
   "author": "kola",
   "repository": {
@@ -53,13 +56,15 @@
   "license": "MIT",
   "files": [
     "index.js",
+    "pricing.js",
     "client.js",
     "index.d.ts",
     "cordis.patch.yml",
     "preview.png",
     "README.md",
     "README_CN.md",
-    "LICENSE"
+    "LICENSE",
+    "scripts/"
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=4.0.0",

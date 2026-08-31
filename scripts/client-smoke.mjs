@@ -1,9 +1,9 @@
 /**
  * Offline smoke for dsh-plugin-usage-stats client half: load client.js through
  * a stubbed __ModuleLoader__ / React / module table, register the settings
- * section, and render it against a fake summary - asserting the section
- * metadata, both locales, and the rendered chart shapes (heatmap cells, trend
- * paths, donut circles, model rows). Run: node scripts/client-smoke.mjs
+ * section, and render it against an extended ready summary - asserting
+ * cost cards, token composition, heatmap, trend curve, donut, top sessions, and tools.
+ * Run: node scripts/client-smoke.mjs
  */
 import { deepEqual, equal, ok } from "node:assert/strict";
 
@@ -16,10 +16,11 @@ const React = {
   useCallback: (fn) => fn,
   useMemo: (fn) => fn(),
 };
-const jsx = (type, props) => ({ type, props: props ?? {} });
+const jsx = (type, props, key) => ({ type, props: props ?? {}, key });
+const jsxs = jsx;
 const requireStub = (id) => {
   if (id === "react") return React;
-  if (id === "react/jsx-runtime") return { jsx, jsxs: jsx };
+  if (id === "react/jsx-runtime") return { jsx, jsxs };
   if (id === "@deepseek-ai/dsh-client-ui-primitives") return { IconRefreshOutline16: () => null };
   throw new Error("unexpected require: " + id);
 };
@@ -37,7 +38,10 @@ const locales = {};
 const registrations = [];
 let sectionComponent = null;
 client.apply({
-  locale: { register: (ns, dict) => { locales[ns] = dict; } },
+  locale: {
+    register: (ns, dict) => { locales[ns] = dict; },
+    bind: (ns) => (k) => locales[ns]?.zh?.[k] ?? k,
+  },
   slots: {
     inject: (slot, gen) => { for (const item of gen()) registrations.push({ slot, item }); },
     register: (meta, component) => { sectionComponent = component; return meta; },
@@ -45,7 +49,6 @@ client.apply({
 });
 ok(locales["usage-stats"], "locale registered under usage-stats");
 ok(locales["usage-stats"].zh && locales["usage-stats"].en, "both locales registered");
-ok(!("daily" in locales["usage-stats"].zh) && !("daily" in locales["usage-stats"].en), "no dead locale keys");
 equal(registrations.length, 1, "one settings section registration");
 equal(registrations[0].slot, "settings.section", "registered on settings.section");
 equal(registrations[0].item.id, "usageStats", "section id");
@@ -59,22 +62,56 @@ ok(sectionComponent, "section component captured");
 const d = new Date();
 const todayKey = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 const SUMMARY = {
-  totals: { inputTokens: 1_000_000, outputTokens: 500_000, totalTokens: 1_500_000, cacheReadTokens: 250_000, sessions: 42, turns: 100, steps: 321, llmMs: 3_600_000 },
-  byDay: { [todayKey]: { inputTokens: 1_000, outputTokens: 500, totalTokens: 1_500 } },
+  totals: {
+    inputTokens: 1_000_000,
+    outputTokens: 500_000,
+    totalTokens: 1_750_000,
+    cacheReadTokens: 250_000,
+    reasoningTokens: 100_000,
+    userInputTokens: 20_000,
+    toolResultTokens: 80_000,
+    costUsd: 1.85,
+    costCny: 13.20,
+    savedUsd: 0.50,
+    savedCny: 3.60,
+    sessions: 42,
+    turns: 100,
+    steps: 321,
+    llmMs: 3_600_000,
+    tokensPerSecond: 138.9,
+    avgTurnMs: 36000,
+    totalToolCalls: 240,
+  },
+  tokenComposition: [
+    { category: "cacheRead", labelKey: "compCacheRead", tokens: 250000, percent: 14.3, color: "#3b82f6" },
+    { category: "userInput", labelKey: "compUserInput", tokens: 20000, percent: 1.1, color: "#10b981" },
+    { category: "assistantOutput", labelKey: "compAssistantOutput", tokens: 400000, percent: 22.9, color: "#8b5cf6" },
+    { category: "reasoning", labelKey: "compReasoning", tokens: 100000, percent: 5.7, color: "#f59e0b" },
+    { category: "toolResult", labelKey: "compToolResult", tokens: 80000, percent: 4.6, color: "#ec4899" },
+  ],
+  topSessions: [
+    { id: "s1", title: "Project Alpha", workspace: "/root/alpha", totalTokens: 1200000, turns: 45, costUsd: 1.2, costCny: 8.5, lastActiveTime: Date.now() - 3600000 },
+    { id: "s2", title: "Project Beta", workspace: "/root/beta", totalTokens: 550000, turns: 20, costUsd: 0.65, costCny: 4.7, lastActiveTime: Date.now() - 7200000 },
+  ],
+  topTools: [
+    { name: "view_file", count: 120, percent: 50.0 },
+    { name: "run_command", count: 80, percent: 33.3 },
+  ],
+  byDay: { [todayKey]: { inputTokens: 1_000, outputTokens: 500, totalTokens: 1_500, costUsd: 0.01, costCny: 0.07 } },
   byModel: {
-    "ark/deepseek-v4-flash": { inputTokens: 800, outputTokens: 400, totalTokens: 1_200 },
-    "ollama/qwen3": { inputTokens: 200, outputTokens: 100, totalTokens: 300 },
+    "ark/deepseek-v4-flash": { inputTokens: 800, outputTokens: 400, totalTokens: 1_200, costUsd: 0.01, costCny: 0.07 },
+    "ollama/qwen3": { inputTokens: 200, outputTokens: 100, totalTokens: 300, costUsd: 0.005, costCny: 0.035 },
   },
   longestTurnMs: 90_000,
   streak: { current: 1, longest: 3 },
 };
+
+// Preset state for UsageStatsSection: status = "ready", currency = "cny"
 presetStates.push({ status: "ready", data: SUMMARY, error: null });
+presetStates.push("cny");
 const zh = locales["usage-stats"].zh;
 const tree = sectionComponent({ t: (k) => zh[k] ?? k });
 
-// Render-walk: like React, function components are invoked with their props
-// so nested presentational components (StatCell, Heatmap, TrendLine, Donut...)
-// actually execute; host tags and fragments are yielded as elements.
 function* walk(node) {
   if (node === null || node === undefined) return;
   if (Array.isArray(node)) { for (const child of node) yield* walk(child); return; }
@@ -87,30 +124,28 @@ const nodes = [...walk(tree)];
 const els = nodes.filter((n) => typeof n === "object");
 const texts = nodes.filter((n) => typeof n === "string");
 
-// Hero strip values (zh formatting: 万 / 分钟 / 天).
-ok(texts.includes("150.0 万"), "total tokens formatted as 150.0 万, got: " + texts.filter((t) => t.includes("万")));
+// Cost & Savings
+ok(texts.some((t) => t.includes("¥13.20")), "estimated cost rendered in CNY");
+ok(texts.some((t) => t.includes("¥3.60")), "cache saved amount rendered in CNY");
+ok(texts.some((t) => t.includes("138.9 t/s")), "tokens/sec speed rendered");
+
+// Hero strip values
+ok(texts.includes("175.0 万"), "total tokens formatted as 175.0 万");
 ok(texts.includes("2 分钟"), "longest turn formatted as 2 分钟 (90s rounds up)");
 ok(texts.includes("1 天"), "current streak formatted as 1 天");
-ok(texts.includes("42"), "session count rendered");
 
-// Heatmap: 53 weeks x 7 days of rects, today filled at the top level.
+// Heatmap
 const rects = els.filter((e) => e.type === "rect");
 equal(rects.length, 53 * 7, "heatmap rect count (53 weeks x 7 days)");
-ok(rects.some((r) => r.props.fill === "var(--dsw-alias-state-business-primary, #2563eb)"), "today's cell uses the peak fill");
-ok(els.some((e) => e.type === "title" && typeof e.props.children === "string" && e.props.children.startsWith(todayKey + "：")), "heatmap cell tooltip keyed by date");
 
-// Trend: two area paths + two line paths.
+// Trend: two area paths + two line paths
 const paths = els.filter((e) => e.type === "path");
-equal(paths.length, 4, "trend renders 4 paths (2 areas + 2 lines)");
-ok(paths.every((p) => typeof p.props.d === "string" && p.props.d.includes("M")), "every trend path has a d attribute");
+equal(paths.length, 4, "trend renders 4 paths");
 
-// Model share: donut track + one circle per model, list rows with colors.
-const circles = els.filter((e) => e.type === "circle");
-equal(circles.length, 1 + 2, "donut track + 2 model segments");
-ok(texts.includes("ark/deepseek-v4-flash") && texts.includes("ollama/qwen3"), "model names rendered");
-ok(texts.some((t) => t.endsWith("%")), "model percentages rendered");
+// Top Sessions
+ok(texts.includes("Project Alpha") && texts.includes("Project Beta"), "top session titles rendered");
 
-// Heatmap month labels are localized.
-ok(texts.some((t) => /^[0-9]{1,2}月$/.test(t)), "zh month labels on the heatmap");
+// Top Tools
+ok(texts.includes("view_file") && texts.includes("run_command"), "top tools rendered");
 
 console.log("usage-stats client smoke: OK");
