@@ -121,10 +121,19 @@ function foldEvent(acc, event, sessionId, sessionHeader = null) {
   // Ensure session entry in sessionsMap
   let sessionRecord = acc.sessionsMap.get(sessionId);
   if (!sessionRecord && sessionId) {
+    const rawCwd = sessionHeader?.cwd || sessionHeader?.workspace || "";
+    let defaultTitle = sessionHeader?.title || sessionHeader?.name || "";
+    if (!defaultTitle && rawCwd) {
+      const parts = rawCwd.split(/[\/\\]/).filter(Boolean);
+      defaultTitle = parts[parts.length - 1] || "";
+    }
+    if (!defaultTitle) {
+      defaultTitle = sessionId.replace(/^session-/, "").slice(0, 8);
+    }
     sessionRecord = {
       id: sessionId,
-      title: sessionHeader?.title || sessionId.slice(0, 8),
-      workspace: sessionHeader?.workspace || "",
+      title: defaultTitle,
+      workspace: rawCwd,
       totalTokens: 0,
       inputTokens: 0,
       outputTokens: 0,
@@ -138,6 +147,16 @@ function foldEvent(acc, event, sessionId, sessionHeader = null) {
   }
   if (sessionRecord && event.time && event.time > sessionRecord.lastActiveTime) {
     sessionRecord.lastActiveTime = event.time;
+  }
+
+  // Handle dynamic title and workspace events
+  if (sessionRecord) {
+    if ((event.type === "session/title" || event.type === "session/rename") && event.data?.title) {
+      sessionRecord.title = event.data.title;
+    }
+    if ((event.type === "workspace/attach" || event.type === "session/header") && (event.data?.cwd || event.data?.workspace)) {
+      sessionRecord.workspace = event.data.cwd || event.data.workspace;
+    }
   }
 
   switch (event.type) {
@@ -198,16 +217,28 @@ function foldEvent(acc, event, sessionId, sessionHeader = null) {
     case "user/message": {
       const content = event.data?.content;
       let textTokens = 0;
+      let promptSnippet = "";
       if (typeof content === "string") {
         textTokens = estimateTextTokens(content);
+        promptSnippet = content;
       } else if (Array.isArray(content)) {
         for (const block of content) {
           if (block?.type === "text" && typeof block.text === "string") {
             textTokens += estimateTextTokens(block.text);
+            if (!promptSnippet && block.text.trim()) promptSnippet = block.text.trim();
           }
         }
       }
       acc.totals.userInputTokens += textTokens;
+
+      // If session title is still fallback / default ID, adopt the first user prompt text
+      if (sessionRecord && promptSnippet) {
+        const isDefault = !sessionRecord.title || sessionRecord.title === "session-" || sessionRecord.title.startsWith("session-") || sessionRecord.title === sessionRecord.id.replace(/^session-/, "").slice(0, 8);
+        if (isDefault) {
+          const cleanPrompt = promptSnippet.replace(/[\r\n\t]+/g, " ").trim();
+          sessionRecord.title = cleanPrompt.length > 40 ? cleanPrompt.slice(0, 40) + "…" : cleanPrompt;
+        }
+      }
       break;
     }
     case "tool/call": {

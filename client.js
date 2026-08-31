@@ -778,31 +778,43 @@ window.__ModuleLoader__.load({
           }),
           sessions.map((s, i) => {
             const cost = currency === "cny" ? s.costCny : s.costUsd;
+            let displayTitle = s.title;
+            if (!displayTitle || displayTitle === "session-" || displayTitle.startsWith("session-")) {
+              if (s.workspace) {
+                const wparts = s.workspace.split(/[\/\\]/).filter(Boolean);
+                displayTitle = wparts[wparts.length - 1] || s.id.replace(/^session-/, "").slice(0, 8);
+              } else {
+                displayTitle = s.id.replace(/^session-/, "").slice(0, 8);
+              }
+            }
+            const wsName = s.workspace ? s.workspace.split(/[\/\\]/).filter(Boolean).pop() : "";
+
             return jsxs("div", {
               style: {
-                display: "grid", gridTemplateColumns: "minmax(180px, 2fr) 90px 100px 90px",
+                display: "grid", gridTemplateColumns: "minmax(180px, 2fr) 70px 100px 80px",
                 padding: "12px 16px", alignItems: "center",
                 borderTop: i > 0 ? "1px solid var(--dsw-alias-border-l2, #333)" : "none",
                 fontSize: "12.5px",
               },
               children: [
                 jsxs("div", {
-                  style: { display: "flex", flexDirection: "column", gap: "2px", minWidth: 0, paddingRight: "8px" },
+                  style: { display: "flex", flexDirection: "column", gap: "3px", minWidth: 0, paddingRight: "8px" },
                   children: [
                     jsxs("a", {
                       href: `#/sessions/${s.id}`,
+                      title: `${displayTitle} (${s.id})`,
                       style: {
                         color: "var(--dsw-alias-label-primary, #f3f4f6)", textDecoration: "none", fontWeight: 500,
-                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block",
                       },
-                      children: [s.title || s.id],
+                      children: [displayTitle],
                     }),
                     jsxs("div", {
                       style: { display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "var(--dsw-alias-label-tertiary, #9ca3af)" },
                       children: [
-                        s.workspace ? jsx("span", {
-                          style: { maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", padding: "0 4px", borderRadius: "4px", background: "var(--dsw-alias-bg-layer-3, #242424)" },
-                          children: s.workspace.split("/").pop(),
+                        wsName && wsName !== displayTitle ? jsx("span", {
+                          style: { maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", padding: "1px 5px", borderRadius: "4px", background: "var(--dsw-alias-bg-layer-3, #242424)", color: "var(--dsw-alias-label-secondary, #d1d5db)" },
+                          children: wsName,
                         }) : null,
                         jsx("span", { children: formatRelativeTime(s.lastActiveTime) }),
                       ],
