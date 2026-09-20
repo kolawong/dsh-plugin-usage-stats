@@ -47,7 +47,7 @@ const ctx = {
 };
 
 const mod = await import("../index.js");
-mod.apply(ctx, { enabled: true });
+mod.apply(ctx, { enabled: true, cache: false });
 
 ok(routes.some((r) => r.path === "/api/usage-stats/summary"), "summary endpoint registered");
 ok(listeners.some((l) => l.name === "session/event"), "session/event listener registered");
@@ -101,5 +101,55 @@ const afterNew = await call();
 equal(afterNew.totals.sessions, 3, "a new session's first live event counts it");
 equal(afterNew.totals.totalTokens, before + 150 + 15, "new session tokens folded");
 equal(afterNew.totals.steps, 2, "live messages add no step/end, steps unchanged");
+
+// Test disk cache persistence with isolated DSH_HOME
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+const tmpHome = mkdtempSync(join(tmpdir(), "dsh-smoke-"));
+process.env.DSH_HOME = tmpHome;
+try {
+  const routes2 = [];
+  const fakeWebServer2 = { register: (r) => routes2.push(r) };
+  const ctx2 = {
+    logger: { warn: () => {} },
+    on: () => () => {},
+    inject: (names, cb) => cb({ sessionQuery: fakeSessionQuery, webServer: fakeWebServer2 }),
+  };
+  // 1st run with cache: true: cold call answers computing, background seed writes cache.json
+  mod.apply(ctx2, { enabled: true, cache: true });
+  const route2 = routes2.find((r) => r.path === "/api/usage-stats/summary");
+  const call2 = async () => {
+    const chunks = [];
+    await route2.handler({ url: "/" }, { writeHead: () => {}, end: (b) => chunks.push(b) });
+    return JSON.parse(chunks.join(""));
+  };
+  equal((await call2()).computing, true, "1st run cold call answers computing");
+  await new Promise((r) => setTimeout(r, 200));
+  const res2 = await call2();
+  ok(!res2.computing && res2.totals.totalTokens > 0, "1st run finished and cached");
+
+  // 2nd run with cache: true: instant warm load from cache.json on 0ms cold call!
+  const routes3 = [];
+  const fakeWebServer3 = { register: (r) => routes3.push(r) };
+  const ctx3 = {
+    logger: { warn: () => {} },
+    on: () => () => {},
+    inject: (names, cb) => cb({ sessionQuery: fakeSessionQuery, webServer: fakeWebServer3 }),
+  };
+  mod.apply(ctx3, { enabled: true, cache: true });
+  const route3 = routes3.find((r) => r.path === "/api/usage-stats/summary");
+  const call3 = async () => {
+    const chunks = [];
+    await route3.handler({ url: "/" }, { writeHead: () => {}, end: (b) => chunks.push(b) });
+    return JSON.parse(chunks.join(""));
+  };
+  const warm = await call3();
+  ok(!warm.computing, "2nd run loads immediately from disk cache (not computing)");
+  equal(warm.totals.sessions, 2, "warm load preserved session total");
+} finally {
+  delete process.env.DSH_HOME;
+  try { rmSync(tmpHome, { recursive: true, force: true }); } catch {}
+}
 
 console.log("usage-stats server smoke: OK");

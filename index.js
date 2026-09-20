@@ -14,6 +14,10 @@
  * @license MIT
  */
 
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
+
 let z;
 try {
   const mod = await import("@deepseek-ai/schemastery");
@@ -36,7 +40,79 @@ export const NS = "usage-stats";
 export const Config = z.object({
   /** Master switch for the usage-stats section. */
   enabled: z.boolean().default(true),
+  /** Cache aggregated state to disk for instant startup. */
+  cache: z.boolean().default(true),
 });
+
+function resolveDshHome() {
+  const env = process.env.DSH_HOME;
+  if (env !== undefined && env.trim().length > 0) {
+    const path = env.trim();
+    if (path === "~") return homedir();
+    if (path.startsWith("~/") || path.startsWith("~\\")) return join(homedir(), path.slice(2));
+    return resolve(path);
+  }
+  return join(homedir(), ".dsh");
+}
+
+function getCacheDir() {
+  const dir = join(resolveDshHome(), "plugins", "dsh-plugin-usage-stats");
+  if (!existsSync(dir)) {
+    try { mkdirSync(dir, { recursive: true }); } catch {}
+  }
+  return dir;
+}
+
+function getCacheFilePath() {
+  return join(getCacheDir(), "cache.json");
+}
+
+function loadDiskCache() {
+  const file = getCacheFilePath();
+  if (!existsSync(file)) return null;
+  try {
+    const raw = readFileSync(file, "utf8");
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.totals || typeof parsed.totals.totalTokens !== "number") return null;
+    const acc = createAggregate();
+    acc.totals = Object.assign(acc.totals, parsed.totals);
+    acc.byDay = parsed.byDay || {};
+    acc.byModel = parsed.byModel || {};
+    acc.toolsUsage = parsed.toolsUsage || {};
+    acc.longestTurnMs = parsed.longestTurnMs || 0;
+    if (Array.isArray(parsed.sessions)) {
+      acc.sessionsMap = new Map(parsed.sessions);
+    }
+    if (Array.isArray(parsed.seen)) {
+      acc._seen = new Set(parsed.seen);
+    }
+    return acc;
+  } catch {
+    return null;
+  }
+}
+
+function saveDiskCache(acc) {
+  if (!acc || !acc.totals) return;
+  try {
+    const dir = getCacheDir();
+    const target = join(dir, "cache.json");
+    const temp = join(dir, `cache.${process.pid}.${Date.now()}.tmp`);
+    const payload = {
+      version: 1,
+      updatedAt: Date.now(),
+      totals: acc.totals,
+      byDay: acc.byDay,
+      byModel: acc.byModel,
+      toolsUsage: acc.toolsUsage,
+      longestTurnMs: acc.longestTurnMs,
+      sessions: Array.from(acc.sessionsMap.entries()),
+      seen: Array.from(acc._seen),
+    };
+    writeFileSync(temp, JSON.stringify(payload), "utf8");
+    renameSync(temp, target);
+  } catch {}
+}
 
 /** Local YYYY-MM-DD key for one epoch-ms timestamp (or a Date, reused as-is). */
 function dayKey(time) {
@@ -423,39 +499,71 @@ export function apply(ctx, config) {
   const logger = ctx.logger;
   const enabled = config?.enabled !== false;
   if (!enabled) return;
+  const useCache = config?.cache !== false;
 
-  /** The live, incrementally-maintained aggregate (null until seeded). */
-  let acc = null;
+  /** The live, incrementally-maintained aggregate (null until seeded or loaded from cache). */
+  let acc = useCache ? loadDiskCache() : null;
   /** One in-flight background seed, shared so concurrent asks don't rescan. */
   let seeding = null;
+  /** Debounce timer for saving cache on live session events. */
+  let saveTimer = null;
 
-  /** Seed the aggregate from a full scan (background, non-blocking). */
-  function seed(sessionQuery) {
+  function scheduleSaveCache() {
+    if (!useCache || saveTimer !== null) return;
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      if (acc !== null) saveDiskCache(acc);
+    }, 5000);
+  }
+
+  /**
+   * Seed/sync the aggregate from stored sessions.
+   * If acc already exists (from cache), performs an incremental check: only
+   * reads sessions that have not been folded yet (_seen), taking ~5-15ms.
+   * If forceFull is true or acc is null, scans all sessions.
+   */
+  function seed(sessionQuery, forceFull = false) {
     if (seeding !== null) return seeding;
     seeding = (async () => {
-      const next = createAggregate();
       let sessions = [];
       try { sessions = await sessionQuery.listSessions(); } catch { sessions = []; }
+
+      // If we already have acc and are not doing forceFull, incrementally fold new sessions
+      const next = (!forceFull && acc !== null) ? acc : createAggregate();
       next.totals.sessions = sessions.length;
 
-      let head = 0;
-      const worker = async () => {
-        while (head < sessions.length) {
-          const record = sessions[head];
-          head += 1;
-          const id = record?.header?.id;
-          if (!id) continue;
-          next._seen.add(id);
-          try {
-            const snapshot = await sessionQuery.readSession(id);
-            foldSession(next, snapshot.events ?? [], id, record?.header);
-          } catch {
-            // An unreadable session is skipped, not fatal.
+      const toScan = [];
+      for (const record of sessions) {
+        const id = record?.header?.id;
+        if (!id) continue;
+        if (!forceFull && next._seen.has(id)) continue;
+        toScan.push(record);
+      }
+
+      if (toScan.length > 0) {
+        let head = 0;
+        const worker = async () => {
+          while (head < toScan.length) {
+            const record = toScan[head];
+            head += 1;
+            const id = record?.header?.id;
+            if (!id) continue;
+            next._seen.add(id);
+            try {
+              const snapshot = await sessionQuery.readSession(id);
+              foldSession(next, snapshot.events ?? [], id, record?.header);
+            } catch {
+              // An unreadable session is skipped, not fatal.
+            }
           }
-        }
-      };
-      await Promise.all(Array.from({ length: Math.min(8, sessions.length) }, worker));
+        };
+        await Promise.all(Array.from({ length: Math.min(16, toScan.length) }, worker));
+      }
+
       acc = next;
+      if (useCache) {
+        saveDiskCache(acc);
+      }
     })().finally(() => { seeding = null; });
     return seeding;
   }
@@ -470,6 +578,7 @@ export function apply(ctx, config) {
         acc.totals.sessions += 1;
       }
       foldEvent(acc, event, id, session?.header);
+      scheduleSaveCache();
     } catch {
       // A malformed live event is skipped, not fatal.
     }
@@ -478,12 +587,22 @@ export function apply(ctx, config) {
   ctx.on("session/event", onSessionEvent);
 
   ctx.inject(["sessionQuery", "webServer"], (sctx) => {
+    // Proactively kick off background seed/sync so first request never has to wait!
+    setTimeout(() => {
+      void seed(sctx.sessionQuery).catch(() => {});
+    }, 200);
+
     try {
       sctx.webServer.register({
         kind: "exact",
         path: "/api/usage-stats/summary",
         handler: async (req, res) => {
           try {
+            const urlObj = new URL(req.url ?? "/", "http://localhost");
+            const forceRefresh = urlObj.searchParams.get("refresh") === "1" || urlObj.searchParams.get("force") === "1";
+            if (forceRefresh) {
+              void seed(sctx.sessionQuery, true).catch(() => {});
+            }
             if (acc === null) {
               void seed(sctx.sessionQuery).catch(() => {});
               res.writeHead(200, { "content-type": "application/json" });

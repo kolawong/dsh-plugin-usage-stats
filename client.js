@@ -857,17 +857,80 @@ window.__ModuleLoader__.load({
       });
     }
 
+    // ── Client Caching & Fast Initialization ─────────────────────────────────
+
+    let memorySummaryCache = null;
+    const LOCAL_STORAGE_KEY = "dsh_usage_stats_cache_v1";
+
+    function getStoredCache() {
+      if (memorySummaryCache && memorySummaryCache.totals) return memorySummaryCache;
+      try {
+        if (typeof localStorage !== "undefined") {
+          const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.totals && typeof parsed.totals.totalTokens === "number") {
+              memorySummaryCache = parsed;
+              return parsed;
+            }
+          }
+        }
+      } catch {}
+      return null;
+    }
+
+    function setStoredCache(data) {
+      if (!data || data.computing || !data.totals) return;
+      memorySummaryCache = data;
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+        }
+      } catch {}
+    }
+
+    function ensureStyles() {
+      if (
+        typeof document === "undefined" ||
+        typeof document.getElementById !== "function" ||
+        typeof document.createElement !== "function" ||
+        !document.head
+      ) return;
+      const ID = "dsh-usage-stats-styles";
+      if (document.getElementById(ID)) return;
+      const style = document.createElement("style");
+      style.id = ID;
+      style.textContent = `
+        @keyframes dshUsageStatsSpin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
     // ── Section Page (Main Dashboard) ────────────────────────────────────────
 
     function UsageStatsSection({ t }) {
-      const [state, setState] = useState({ status: "loading", data: null, error: null });
+      const initialCache = useMemo(() => getStoredCache(), []);
+      const [state, setState] = useState(() => ({
+        status: initialCache ? "ready" : "loading",
+        data: initialCache,
+        error: null,
+        isSyncing: false,
+      }));
       const [refreshTick, setRefreshTick] = useState(0);
       const [currency, setCurrency] = useState("cny");
 
       useEffect(() => {
         let cancelled = false;
         let timer = undefined;
-        setState((s) => ({ ...s, status: "loading" }));
+        setState((s) => ({
+          ...s,
+          status: s.data ? "ready" : "loading",
+          isSyncing: true,
+        }));
+
         const poll = () => {
           fetch("/api/usage-stats/summary")
             .then(async (res) => {
@@ -878,17 +941,27 @@ window.__ModuleLoader__.load({
                 timer = setTimeout(poll, 1200);
                 return;
               }
-              setState({ status: "ready", data, error: null });
+              setStoredCache(data);
+              setState({ status: "ready", data, error: null, isSyncing: false });
             })
             .catch((error) => {
-              if (!cancelled) setState({ status: "error", data: null, error: String(error) });
+              if (!cancelled) {
+                setState((s) => ({
+                  ...s,
+                  status: s.data ? "ready" : "error",
+                  error: s.data ? null : String(error),
+                  isSyncing: false,
+                }));
+              }
             });
         };
         poll();
         return () => { cancelled = true; if (timer !== undefined) clearTimeout(timer); };
       }, [refreshTick]);
 
-      const refresh = useCallback(() => { setRefreshTick((n) => n + 1); }, []);
+      const refresh = useCallback(() => {
+        setRefreshTick((n) => n + 1);
+      }, []);
 
       const data = state.data;
       const totals = data?.totals;
@@ -906,16 +979,24 @@ window.__ModuleLoader__.load({
               jsxs("button", {
                 type: "button",
                 onClick: refresh,
+                disabled: state.isSyncing,
                 title: t("refreshHint"),
                 style: {
                   display: "inline-flex", alignItems: "center", gap: "6px",
                   height: "28px", padding: "0 12px", borderRadius: "14px",
-                  fontSize: "12px", lineHeight: "18px", font: "inherit", cursor: "pointer",
+                  fontSize: "12px", lineHeight: "18px", font: "inherit", cursor: state.isSyncing ? "default" : "pointer",
                   color: "var(--dsw-alias-label-secondary, #d1d5db)",
                   background: "transparent",
                   border: "1px solid var(--dsw-alias-border-l2, #333)",
+                  opacity: state.isSyncing ? 0.8 : 1,
                 },
-                children: [jsx(IconRefreshOutline16, { size: 14 }), jsx("span", { children: t("refresh") })],
+                children: [
+                  jsx(IconRefreshOutline16, {
+                    size: 14,
+                    style: state.isSyncing ? { animation: "dshUsageStatsSpin 1s linear infinite" } : undefined,
+                  }),
+                  jsx("span", { children: state.isSyncing ? (isZh() ? "同步中…" : "Syncing…") : t("refresh") }),
+                ],
               }),
             ],
           }),
@@ -924,8 +1005,34 @@ window.__ModuleLoader__.load({
             children: t("intro"),
           }),
 
-          state.status === "loading" ? jsx("p", { style: { color: "var(--dsw-alias-label-tertiary, #9ca3af)", fontSize: "13px" }, children: t("loading") }) : null,
-          state.status === "error" ? jsx("p", { style: { color: "var(--dsw-alias-state-error-primary, #ef4444)", fontSize: "13px" }, children: `${t("error")}: ${state.error}` }) : null,
+          !totals && state.status === "loading" ? jsx("div", {
+            style: {
+              padding: "48px 24px",
+              textAlign: "center",
+              background: "var(--dsw-alias-bg-layer-2, rgba(255,255,255,0.03))",
+              borderRadius: "12px",
+              border: "1px dashed var(--dsw-alias-border-l2, #333)",
+              margin: "16px 0",
+            },
+            children: jsxs("div", {
+              style: { display: "inline-flex", flexDirection: "column", alignItems: "center", gap: "12px" },
+              children: [
+                jsx(IconRefreshOutline16, {
+                  size: 24,
+                  style: { animation: "dshUsageStatsSpin 1.2s linear infinite", color: "var(--dsw-alias-label-secondary, #9ca3af)" },
+                }),
+                jsx("div", {
+                  style: { fontSize: "14px", fontWeight: 500, color: "var(--dsw-alias-label-primary, #f3f4f6)" },
+                  children: t("loading"),
+                }),
+                jsx("div", {
+                  style: { fontSize: "12px", color: "var(--dsw-alias-label-tertiary, #9ca3af)" },
+                  children: isZh() ? "正在分析所有历史会话的用量与成本，首次加载需扫描存储，请稍候…" : "Aggregating historical session token usage and costs, please wait…",
+                }),
+              ],
+            }),
+          }) : null,
+          !totals && state.status === "error" ? jsx("p", { style: { color: "var(--dsw-alias-state-error-primary, #ef4444)", fontSize: "13px" }, children: `${t("error")}: ${state.error}` }) : null,
           state.status === "ready" && totals && totals.sessions === 0 ? jsx("p", { style: { color: "var(--dsw-alias-label-tertiary, #9ca3af)", fontSize: "13px" }, children: t("empty") }) : null,
 
           state.status === "ready" && totals ? jsxs(React.Fragment, {
@@ -1020,6 +1127,7 @@ window.__ModuleLoader__.load({
 
     exports.inject = ["locale", "slots"];
     exports.apply = function apply(ctx) {
+      ensureStyles();
       ctx.locale.register(NS, { zh, en });
       const t = ctx.locale.bind(NS);
 
