@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "dsh-plugin-usage-stats",
+    "description": "DeepSeek Harness plugin for AI usage & cost intelligence: token totals, cost estimation ($/¥), cache savings, 5-way token composition, 365-day activity heatmap, 30-day token trend, model breakdown, top sessions leaderboard, and tool analytics."
+  }
+}

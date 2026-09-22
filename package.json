@@ -18,7 +18,8 @@
       "default": "./index.js"
     },
     "./client": "./client.js",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
   },
   "dsh": {
     "bundle": {
@@ -66,7 +67,8 @@
     "README.md",
     "README_CN.md",
     "LICENSE",
-    "scripts/"
+    "scripts/",
+    "locale/*.json"
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=4.0.0",

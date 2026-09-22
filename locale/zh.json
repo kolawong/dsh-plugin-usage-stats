@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "dsh-plugin-usage-stats",
+    "description": "AI 用量与成本智能分析：Token 总量、美元/人民币成本预估、缓存节省、365 天活跃热力图、30 天趋势、模型消耗占比及工具调用分析。"
+  }
+}
