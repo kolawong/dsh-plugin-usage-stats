@@ -43,6 +43,7 @@ export const Config = z.object({
   /** Cache aggregated state to disk for instant startup. */
   cache: z.boolean().default(true),
 });
+Config.meta.volatile = true;
 
 function resolveDshHome() {
   const env = process.env.DSH_HOME;

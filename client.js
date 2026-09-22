@@ -24,7 +24,18 @@ window.__ModuleLoader__.load({
     const React = require("react");
     const { useState, useEffect, useCallback, useMemo } = React;
     const { jsx, jsxs } = require("react/jsx-runtime");
-    const { IconRefreshOutline16 } = require("@deepseek-ai/dsh-client-ui-primitives");
+    const primitives = require("@deepseek-ai/dsh-client-ui-primitives");
+    if (primitives && typeof primitives === "object") {
+      for (const key of Object.keys(primitives)) {
+        if (key.startsWith("Icon") && key.endsWith("Regular")) {
+          const base = key.slice(0, -7);
+          for (const suffix of ["12", "14", "16", "18", "20", "24", ""]) {
+            if (!primitives[base + suffix]) primitives[base + suffix] = primitives[key];
+          }
+        }
+      }
+    }
+    const IconRefreshOutline16 = primitives.IconRefreshOutlineRegular || primitives.IconRefreshOutline16 || (() => null);
 
     const NS = "usage-stats";
 

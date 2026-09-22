@@ -1,12 +1,14 @@
 {
   "name": "dsh-plugin-usage-stats",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "DeepSeek Harness plugin for AI usage & cost intelligence: token totals, cost estimation ($/¥), cache savings, 5-way token composition, 365-day activity heatmap, 30-day token trend, model breakdown, top sessions leaderboard, and tool analytics.",
   "type": "module",
   "scripts": {
     "smoke": "node scripts/smoke.mjs",
     "smoke:client": "node scripts/client-smoke.mjs",
-    "test": "node scripts/smoke.mjs && node scripts/client-smoke.mjs"
+    "test": "node scripts/smoke.mjs && node scripts/client-smoke.mjs",
+    "build": "node -c index.js && node -c client.js",
+    "prepare": "node -c index.js && node -c client.js"
   },
   "main": "index.js",
   "types": "index.d.ts",
