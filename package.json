@@ -7,8 +7,7 @@
     "smoke": "node scripts/smoke.mjs",
     "smoke:client": "node scripts/client-smoke.mjs",
     "test": "node scripts/smoke.mjs && node scripts/client-smoke.mjs",
-    "build": "node -c index.js && node -c client.js",
-    "prepare": "node -c index.js && node -c client.js"
+    "build": "node -c index.js && node -c client.js"
   },
   "main": "index.js",
   "types": "index.d.ts",
