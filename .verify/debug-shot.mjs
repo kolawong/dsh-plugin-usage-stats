@@ -1,0 +1,11 @@
+import { chromium } from "playwright";
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+await page.goto("http://127.0.0.1:3080/", { waitUntil: "networkidle" });
+await page.waitForTimeout(3000);
+await page.screenshot({ path: "/root/dsh-plugin-usage-stats/.verify/ui-review/debug-landing.png" });
+console.log("title:", await page.title());
+console.log("lang:", await page.evaluate(() => document.documentElement.lang));
+const txt = await page.evaluate(() => document.body.innerText.slice(0, 600));
+console.log(txt);
+await browser.close();

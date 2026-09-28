@@ -13,3 +13,6 @@ Thumbs.db
 
 # Local env
 .env
+
+# Verification screenshots (stay local, never committed)
+.verify/**/*.png

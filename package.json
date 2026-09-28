@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-usage-stats",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "DeepSeek Harness plugin for AI usage & cost intelligence: token totals, cost estimation ($/¥), cache savings, 5-way token composition, 365-day activity heatmap, 30-day token trend, model breakdown, top sessions leaderboard, and tool analytics.",
   "type": "module",
   "scripts": {
@@ -26,7 +26,6 @@
     },
     "client": {
       "inject": [
-        "@deepseek-ai/dsh-client-ui-settings-plugins",
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-ui-primitives"
@@ -43,7 +42,7 @@
     "cost",
     "pricing",
     "tokens",
-    "settings",
+    "sidebar",
     "context"
   ],
   "author": "kola",

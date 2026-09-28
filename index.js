@@ -1,7 +1,7 @@
 /**
  * dsh-plugin-usage-stats — Server half
  *
- * Adds a Usage Statistics section to the Web settings sidebar. The server
+ * Adds a Usage Statistics dashboard panel to the Web left sidebar. The server
  * aggregates token usage, costs, timing, and tool activity across every
  * persisted session and serves it at /api/usage-stats/summary for the client page.
  *

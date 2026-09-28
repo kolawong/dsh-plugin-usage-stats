@@ -8,7 +8,7 @@ English | [简体中文](README_CN.md)
 [![Zero Dependencies](https://img.shields.io/badge/Dependencies-0-brightgreen.svg)]()
 [![Platform: Web](https://img.shields.io/badge/Platform-Web-orange.svg)]()
 
-An enterprise-grade AI Usage & Cost Intelligence plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). Adds a native analytics and cost dashboard to the Web settings: monetary cost estimation ($/¥), prompt cache savings, 5-way token composition breakdown, 365-day activity heatmap, 30-day dual-trend curves, multi-dimensional distribution donut (Provider/Model/Cost), top sessions leaderboard, and high-frequency tool analytics — aggregated live from your local session logs.
+An enterprise-grade AI Usage & Cost Intelligence plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). Adds a native analytics and cost dashboard to the Web **left sidebar** (its own panel row, beside Plugins/Tasks): monetary cost estimation ($/¥), prompt cache savings, 5-way token composition breakdown, 365-day activity heatmap, 30-day dual-trend curves, multi-dimensional distribution donut (Provider/Model/Cost), top sessions leaderboard, and high-frequency tool analytics — aggregated live from your local session logs.
 
 ![preview](preview.png)
 
@@ -49,7 +49,7 @@ An enterprise-grade AI Usage & Cost Intelligence plugin for [DeepSeek Harness](h
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    DSH Web Client (Browser)                 │
-│  - Settings Section: "Usage & Cost Intelligence"            │
+│  - Left-Sidebar Panel: "Usage & Cost Intelligence"          │
 │  - Hand-rolled Pure Inline SVG (Heatmap / Trend / Donut)    │
 │  - Currency Switcher (¥ CNY / $ USD) & Dimension Switchers  │
 └──────────────────────────────▲──────────────────────────────┘
@@ -106,8 +106,7 @@ dsh web
 
 ### Verification & Access
 
-After starting, open your browser and navigate to:
-👉 **Settings (`设置`) → Usage Statistics (`使用统计`)**
+After starting, open your browser and click the **Usage Statistics (`使用统计`)** icon row in the **left sidebar** (beside Plugins/Tasks) — the dashboard opens as a full main-column page.
 
 To check that the plugin layer is properly registered:
 ```sh
